@@ -49,9 +49,9 @@ func (store *StateStore) CreateTables() error {
 		)
 		`,
 		`
-		CREATE TABLE IF NOT EXISTS config_rooms (
-			user_id  VARCHAR(255) PRIMARY KEY,
-			room_id  VARCHAR(255)
+		CREATE TABLE IF NOT EXISTS user_config_room (
+			user_id            VARCHAR(255) PRIMARY KEY,
+			room_id            VARCHAR(255)
 		)
 		`,
 	}

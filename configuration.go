@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/siddontang/go/log"
+	log "github.com/sirupsen/logrus"
 )
 
 type Configuration struct {

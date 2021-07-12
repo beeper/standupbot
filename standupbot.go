@@ -20,6 +20,11 @@ import (
 	"git.sr.ht/~sumner/standupbot/store"
 )
 
+var client *mautrix.Client
+var configuration Configuration
+var olmMachine *mcrypto.OlmMachine
+var stateStore *store.StateStore
+
 func main() {
 	// Arg parsing
 	configPath := flag.String("config", xdg.ConfigHome()+"/standupbot/config.json", "config file location")
@@ -52,7 +57,6 @@ func main() {
 		log.Fatalf("Could not read config from %s: %s", *configPath, err)
 	}
 
-	var configuration Configuration
 	err = json.Unmarshal(configJson, &configuration)
 	username := mid.UserID(configuration.Username)
 
@@ -61,13 +65,12 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not open standupbot database.")
 	}
-	stateStore := store.NewStateStore(db)
+	stateStore = store.NewStateStore(db)
 	if err := stateStore.CreateTables(); err != nil {
 		log.Fatal("Failed to create the tables for standupbot.", err)
 	}
 
 	// login to homeserver
-	var client *mautrix.Client
 	if access_token, err := stateStore.GetAccessToken(); err == nil && access_token != "" {
 		log.Infof("Got access token: %s", access_token)
 		client, err = mautrix.NewClient(configuration.Homeserver, username, access_token)
@@ -123,6 +126,7 @@ func main() {
 	)
 	go func() {
 		for range c { // when the process is killed
+			log.Info("Cleaning up")
 			db.Close()
 			os.Exit(0)
 		}
@@ -142,7 +146,7 @@ func main() {
 		log.Fatal("Could not create tables for the SQL crypto store.")
 	}
 
-	olmMachine := mcrypto.NewOlmMachine(client, &CryptoLogger{}, sqlCryptoStore, stateStore)
+	olmMachine = mcrypto.NewOlmMachine(client, &CryptoLogger{}, sqlCryptoStore, stateStore)
 	err = olmMachine.Load()
 	if err != nil {
 		log.Errorf("Could not initialize encryption support. Encrypted rooms will not work.")
@@ -173,7 +177,7 @@ func main() {
 		} else {
 			roomMembers := stateStore.GetRoomMembers(event.RoomID)
 			if len(roomMembers) == 1 && roomMembers[0] == username {
-				log.Info("Leaving %s because we're the last here", event.RoomID)
+				log.Infof("Leaving %s because we're the last here", event.RoomID)
 				DoRetry("leave room", func() (interface{}, error) {
 					return client.LeaveRoom(event.RoomID)
 				})
@@ -189,9 +193,7 @@ func main() {
 		log.Infof("REACTION %+v", event)
 	})
 
-	syncer.OnEventType(mevent.EventMessage, func(_ mautrix.EventSource, event *mevent.Event) {
-		log.Infof("MESSAGE %+v", event)
-	})
+	syncer.OnEventType(mevent.EventMessage, func(source mautrix.EventSource, event *mevent.Event) { go HandleMessage(source, event) })
 
 	syncer.OnEventType(mevent.EventEncrypted, func(source mautrix.EventSource, event *mevent.Event) {
 		decryptedEvent, err := olmMachine.DecryptMegolmEvent(event)
@@ -200,7 +202,7 @@ func main() {
 		} else {
 			log.Debug("Received encrypted event: ", decryptedEvent.Content.Raw)
 			if decryptedEvent.Type == mevent.EventMessage {
-				log.Infof("MESSAGE %+v", decryptedEvent)
+				go HandleMessage(source, decryptedEvent)
 			}
 		}
 	})

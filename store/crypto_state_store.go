@@ -18,17 +18,16 @@ func (store *StateStore) IsEncrypted(roomID mid.RoomID) bool {
 }
 
 func (store *StateStore) GetEncryptionEvent(roomId mid.RoomID) *mevent.EncryptionEventContent {
-	row, err := store.DB.Query("SELECT encryption_event FROM rooms WHERE room_id = ?", roomId)
-	if err != nil {
-		return nil
-	}
+	row := store.DB.QueryRow("SELECT encryption_event FROM rooms WHERE room_id = ?", roomId)
 
 	var encryptionEventJson []byte
 	if err := row.Scan(&encryptionEventJson); err != nil {
+		log.Errorf("Failed to find encryption event JSON: %s. Error: %s", encryptionEventJson, err)
 		return nil
 	}
 	var encryptionEvent mevent.EncryptionEventContent
 	if err := json.Unmarshal(encryptionEventJson, &encryptionEvent); err != nil {
+		log.Errorf("Failed to unmarshal encryption event JSON: %s. Error: %s", encryptionEventJson, err)
 		return nil
 	}
 	return &encryptionEvent
@@ -74,7 +73,6 @@ func (store *StateStore) SetMembership(event *mevent.Event) {
 }
 
 func (store *StateStore) upsertEncryptionEvent(roomId mid.RoomID, encryptionEvent *mevent.Event) error {
-	log.Info("Upserting row into rooms")
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
@@ -91,12 +89,12 @@ func (store *StateStore) upsertEncryptionEvent(roomId mid.RoomID, encryptionEven
 		encryptionEventJson = nil
 	}
 
-	if _, err := tx.Exec(update, encryptionEventJson); err != nil {
+	if _, err := tx.Exec(update, encryptionEventJson, roomId); err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	insert := "INSERT OR IGNORE INTO room VALUES (?, ?)"
+	insert := "INSERT OR IGNORE INTO rooms VALUES (?, ?)"
 	if _, err := tx.Exec(insert, roomId, encryptionEventJson); err != nil {
 		tx.Rollback()
 		return err
