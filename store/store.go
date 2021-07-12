@@ -19,7 +19,39 @@ func (store *StateStore) CreateTables() error {
 	queries := []string{
 		`
 		CREATE TABLE IF NOT EXISTS standupbot_meta (
-			access_token VARCHAR(255)
+			meta_id       INTEGER PRIMARY KEY,
+			access_token  VARCHAR(255)
+		)
+		`,
+		`
+		CREATE TABLE IF NOT EXISTS user_filter_ids (
+			user_id    VARCHAR(255) PRIMARY KEY,
+			filter_id  VARCHAR(255)
+		)
+		`,
+		`
+		CREATE TABLE IF NOT EXISTS user_batch_tokens (
+			user_id           VARCHAR(255) PRIMARY KEY,
+			next_batch_token  VARCHAR(255)
+		)
+		`,
+		`
+		CREATE TABLE IF NOT EXISTS rooms (
+			room_id           VARCHAR(255) PRIMARY KEY,
+			encryption_event  VARCHAR(65535) NULL
+		)
+		`,
+		`
+		CREATE TABLE IF NOT EXISTS room_members (
+			room_id  VARCHAR(255),
+			user_id  VARCHAR(255),
+			PRIMARY KEY (room_id, user_id)
+		)
+		`,
+		`
+		CREATE TABLE IF NOT EXISTS config_rooms (
+			user_id  VARCHAR(255) PRIMARY KEY,
+			room_id  VARCHAR(255)
 		)
 		`,
 	}

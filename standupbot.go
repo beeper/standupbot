@@ -6,11 +6,15 @@ import (
 	"flag"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/kyoh86/xdg"
 	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
 	"maunium.net/go/mautrix"
+	mcrypto "maunium.net/go/mautrix/crypto"
+	mevent "maunium.net/go/mautrix/event"
 	mid "maunium.net/go/mautrix/id"
 
 	"git.sr.ht/~sumner/standupbot/store"
@@ -45,7 +49,7 @@ func main() {
 	log.Infof("reading config from %s...", *configPath)
 	configJson, err := os.ReadFile(*configPath)
 	if err != nil {
-		log.Fatalf("Could not read config from %s: %s", configPath, err)
+		log.Fatalf("Could not read config from %s: %s", *configPath, err)
 	}
 
 	var configuration Configuration
@@ -59,7 +63,7 @@ func main() {
 	}
 	stateStore := store.NewStateStore(db)
 	if err := stateStore.CreateTables(); err != nil {
-		log.Fatal("Failed to create the tables for standupbot")
+		log.Fatal("Failed to create the tables for standupbot.", err)
 	}
 
 	// login to homeserver
@@ -103,5 +107,109 @@ func main() {
 		}
 	}
 
-	db.Close()
+	// set the client store on the client.
+	client.Store = stateStore
+
+	// Make sure to exit cleanly
+	c := make(chan os.Signal, 1)
+	signal.Notify(c,
+		os.Interrupt,
+		os.Kill,
+		syscall.SIGABRT,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+		syscall.SIGTERM,
+	)
+	go func() {
+		for range c { // when the process is killed
+			db.Close()
+			os.Exit(0)
+		}
+	}()
+
+	// Setup the crypto store
+	sqlCryptoStore := mcrypto.NewSQLCryptoStore(
+		db,
+		"sqlite3",
+		username.String(),
+		mid.DeviceID("Bot Host"),
+		[]byte("standupbot_cryptostore_key"),
+		CryptoLogger{},
+	)
+	err = sqlCryptoStore.CreateTables()
+	if err != nil {
+		log.Fatal("Could not create tables for the SQL crypto store.")
+	}
+
+	olmMachine := mcrypto.NewOlmMachine(client, &CryptoLogger{}, sqlCryptoStore, stateStore)
+	err = olmMachine.Load()
+	if err != nil {
+		log.Errorf("Could not initialize encryption support. Encrypted rooms will not work.")
+	}
+
+	syncer := client.Syncer.(*mautrix.DefaultSyncer)
+	// Hook up the OlmMachine into the Matrix client so it receives e2ee
+	// keys and other such things.
+	syncer.OnSync(func(resp *mautrix.RespSync, since string) bool {
+		olmMachine.ProcessSyncResponse(resp, since)
+		return true
+	})
+
+	syncer.OnEventType(mevent.StateMember, func(_ mautrix.EventSource, event *mevent.Event) {
+		olmMachine.HandleMemberEvent(event)
+		stateStore.SetMembership(event)
+
+		if event.GetStateKey() == username.String() && event.Content.AsMember().Membership == mevent.MembershipInvite {
+			log.Info("Joining ", event.RoomID)
+			_, err := DoRetry("join room", func() (interface{}, error) {
+				return client.JoinRoomByID(event.RoomID)
+			})
+			if err != nil {
+				log.Error("Could not join channel %s. Error %s", event.RoomID.String(), err)
+			} else {
+				log.Infof("Joined %s sucessfully", event.RoomID.String())
+			}
+		} else {
+			roomMembers := stateStore.GetRoomMembers(event.RoomID)
+			if len(roomMembers) == 1 && roomMembers[0] == username {
+				log.Info("Leaving %s because we're the last here", event.RoomID)
+				DoRetry("leave room", func() (interface{}, error) {
+					return client.LeaveRoom(event.RoomID)
+				})
+			}
+		}
+	})
+
+	syncer.OnEventType(mevent.StateEncryption, func(_ mautrix.EventSource, event *mevent.Event) {
+		stateStore.SetEncryptionEvent(event)
+	})
+
+	syncer.OnEventType(mevent.EventReaction, func(_ mautrix.EventSource, event *mevent.Event) {
+		log.Infof("REACTION %+v", event)
+	})
+
+	syncer.OnEventType(mevent.EventMessage, func(_ mautrix.EventSource, event *mevent.Event) {
+		log.Infof("MESSAGE %+v", event)
+	})
+
+	syncer.OnEventType(mevent.EventEncrypted, func(source mautrix.EventSource, event *mevent.Event) {
+		decryptedEvent, err := olmMachine.DecryptMegolmEvent(event)
+		if err != nil {
+			log.Warn("Failed to decrypt: ", err)
+		} else {
+			log.Debug("Received encrypted event: ", decryptedEvent.Content.Raw)
+			if decryptedEvent.Type == mevent.EventMessage {
+				log.Infof("MESSAGE %+v", decryptedEvent)
+			}
+		}
+	})
+
+	for {
+		log.Debugf("Running sync...")
+		err = client.Sync()
+		if err != nil {
+			log.Errorf("Sync failed. %+v", err)
+		}
+	}
 }
