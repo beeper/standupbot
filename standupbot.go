@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -114,7 +115,46 @@ func main() {
 	// set the client store on the client.
 	client.Store = stateStore
 
-	// TODO load state from all of the rooms that we are joined to in case the database died.
+	// Load state from all of the rooms that we are joined to in case the
+	// database died.
+	joinedRooms, err := client.JoinedRooms()
+	if err == nil {
+		for _, roomID := range joinedRooms.JoinedRooms {
+			members, err := client.Members(roomID)
+			potentialUsers := make([]mid.UserID, 0)
+			if err != nil {
+				continue
+			}
+			for _, membershipEvent := range members.Chunk {
+				potentialUsers = append(potentialUsers, membershipEvent.Sender)
+			}
+
+			for _, userID := range potentialUsers {
+				stateKey := strings.TrimPrefix(userID.String(), "@")
+
+				var tzSettingEventContent TzSettingEventContent
+				if err := client.StateEvent(roomID, StateTzSetting, stateKey, &tzSettingEventContent); err == nil {
+					if location, err := time.LoadLocation(tzSettingEventContent.TzString); err == nil {
+						log.Infof("Loaded timezone (%s) for %s from state", location, userID)
+						stateStore.SetTimezone(userID, location.String())
+					}
+				}
+
+				var notifyEventContent NotifyEventContent
+				if err := client.StateEvent(roomID, StateNotify, stateKey, &notifyEventContent); err == nil {
+					log.Infof("Loaded notification minutes after midnight (%d) for %s from state", notifyEventContent.MinutesAfterMidnight, userID)
+					stateStore.SetNotify(userID, notifyEventContent.MinutesAfterMidnight)
+				}
+
+				var sendRoomEventContent SendRoomEventContent
+				if err := client.StateEvent(roomID, StateSendRoom, stateKey, &sendRoomEventContent); err == nil {
+					log.Infof("Loaded send room (%s) for %s from state", sendRoomEventContent.SendRoomID, userID)
+					stateStore.SetSendRoomId(userID, sendRoomEventContent.SendRoomID)
+				}
+			}
+		}
+
+	}
 
 	// Make sure to exit cleanly
 	c := make(chan os.Signal, 1)

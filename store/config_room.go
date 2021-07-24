@@ -85,7 +85,7 @@ func (store *StateStore) SetNotify(userID mid.UserID, minutesAfterMidnight int) 
 }
 
 func (store *StateStore) SetSendRoomId(userID mid.UserID, sendRoomID mid.RoomID) {
-	log.Infof("Setting send room ID for %s to %d", userID, sendRoomID.String())
+	log.Infof("Setting send room ID for %s to %s", userID, sendRoomID.String())
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
