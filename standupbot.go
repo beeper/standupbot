@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/kyoh86/xdg"
 	_ "github.com/mattn/go-sqlite3"
@@ -174,6 +175,9 @@ func main() {
 			} else {
 				log.Infof("Joined %s sucessfully", event.RoomID.String())
 			}
+		} else if event.GetStateKey() == username.String() && event.Content.AsMember().Membership.IsLeaveOrBan() {
+			log.Infof("Left or banned from %s", event.RoomID)
+			stateStore.RemoveConfigRoom(event.RoomID)
 		} else {
 			roomMembers := stateStore.GetRoomMembers(event.RoomID)
 			if len(roomMembers) == 1 && roomMembers[0] == username {
@@ -193,7 +197,7 @@ func main() {
 		log.Infof("REACTION %+v", event)
 	})
 
-	syncer.OnEventType(mevent.EventMessage, func(source mautrix.EventSource, event *mevent.Event) { go HandleMessage(source, event) })
+	syncer.OnEventType(mevent.EventMessage, func(source mautrix.EventSource, event *mevent.Event) { go HandleMessage(source, event, stateStore) })
 
 	syncer.OnEventType(mevent.EventEncrypted, func(source mautrix.EventSource, event *mevent.Event) {
 		decryptedEvent, err := olmMachine.DecryptMegolmEvent(event)
@@ -202,10 +206,32 @@ func main() {
 		} else {
 			log.Debug("Received encrypted event: ", decryptedEvent.Content.Raw)
 			if decryptedEvent.Type == mevent.EventMessage {
-				go HandleMessage(source, decryptedEvent)
+				go HandleMessage(source, decryptedEvent, stateStore)
 			}
 		}
 	})
+
+	// Notification loop
+	go func() {
+		log.Debugf("Starting notification loop")
+		for {
+			h, m, _ := time.Now().UTC().Clock()
+			currentMinutesAfterMidnight := h*60 + m
+			usersForCurrentMinute := stateStore.GetNotifyUsersForMinutesAfterUtc()[currentMinutesAfterMidnight]
+
+			for userID, roomID := range usersForCurrentMinute {
+				log.Infof("Notifying %s", userID)
+				SendMessage(roomID, mevent.MessageEventContent{
+					MsgType: mevent.MsgText,
+					Body:    "Time to write your standup post!",
+				})
+				go CreatePost(roomID, userID)
+			}
+
+			// Sleep until the next minute comes around
+			time.Sleep(time.Duration(60-time.Now().Second()) * time.Second)
+		}
+	}()
 
 	for {
 		log.Debugf("Running sync...")

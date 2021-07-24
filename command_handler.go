@@ -7,12 +7,43 @@ import (
 	"strings"
 	"time"
 
+	"git.sr.ht/~sumner/standupbot/store"
 	log "github.com/sirupsen/logrus"
 	"maunium.net/go/mautrix"
 	mcrypto "maunium.net/go/mautrix/crypto"
 	mevent "maunium.net/go/mautrix/event"
 	mid "maunium.net/go/mautrix/id"
 )
+
+type StandupFlowState int
+
+const (
+	FlowNotStarted StandupFlowState = iota
+	Yesterday
+	Today
+	Blockers
+	Notes
+)
+
+type StandupFlow struct {
+	State     StandupFlowState
+	Yesterday []string
+	Today     []string
+	Blockers  []string
+	Notes     []string
+}
+
+var currentStandupFlows map[mid.UserID]*StandupFlow = make(map[mid.UserID]*StandupFlow)
+
+func BlankStandupFlow() *StandupFlow {
+	return &StandupFlow{
+		State:     FlowNotStarted,
+		Yesterday: make([]string, 0),
+		Today:     make([]string, 0),
+		Blockers:  make([]string, 0),
+		Notes:     make([]string, 0),
+	}
+}
 
 func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *mautrix.RespSendEvent, err error) {
 	r, err := DoRetry("send message", func() (interface{}, error) {
@@ -49,10 +80,23 @@ func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *m
 	return r.(*mautrix.RespSendEvent), err
 }
 
+func SendReaction(roomId mid.RoomID, eventID mid.EventID, reaction string) (resp *mautrix.RespSendEvent, err error) {
+	r, err := DoRetry("send reaction", func() (interface{}, error) {
+		return client.SendReaction(roomId, eventID, reaction)
+	})
+	if err != nil {
+		// give up
+		log.Errorf("Failed to send reaction to %s in %s: %s", eventID, roomId, err)
+		return nil, err
+	}
+	return r.(*mautrix.RespSendEvent), err
+}
+
 func SendHelp(roomId mid.RoomID) {
 	// send message to channel confirming join (retry 3 times)
 	noticeText := `COMMANDS:
 * new -- prepare a new standup post
+* cancel -- cancel the current standup post
 * help -- show this help
 * vanquish -- tell the bot to leave the room
 * tz [timezone] -- show or set the timezone to use for configuring notifications
@@ -61,6 +105,7 @@ func SendHelp(roomId mid.RoomID) {
 	noticeHtml := `<b>COMMANDS:</b>
 <ul>
 <li><b>new</b> &mdash; prepare a new standup post</li>
+<li><b>cancel</b> &mdash; cancel the current standup post</li>
 <li><b>help</b> &mdash; show this help</li>
 <li><b>vanquish</b> &mdash; tell the bot to leave the room</li>
 <li><b>tz [timezone]</b> &mdash; show or set the timezone to use for configuring notifications</li>
@@ -83,7 +128,7 @@ type TzSettingEventContent struct {
 	TzString string
 }
 
-func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
+func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string, store *store.StateStore) {
 	stateKey := strings.TrimPrefix(sender.String(), "@")
 	if len(params) == 0 {
 		tzStr := "not set"
@@ -111,6 +156,8 @@ func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
 	noticeText := fmt.Sprintf("Timezone set to %s", location.String())
 	if err != nil {
 		noticeText = fmt.Sprintf("Failed setting timezone: %s", err)
+	} else {
+		store.SetTimezone(sender, location.String())
 	}
 	SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 }
@@ -122,7 +169,7 @@ type NotifyEventContent struct {
 	MinutesAfterMidnight int
 }
 
-func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
+func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string, store *store.StateStore) {
 	stateKey := strings.TrimPrefix(sender.String(), "@")
 	if len(params) == 0 {
 		var notifyEventContent NotifyEventContent
@@ -153,22 +200,24 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 			noticeText = fmt.Sprintf("%s is not a valid time. Please specify it in 24-hour time like: 13:30.", params[0])
 		} else {
 			noticeText = fmt.Sprintf("Notification time set to %02d:%02d", hours, minutes)
+			minutesAfterMidnight := minutes + hours*60
 			_, err := client.SendStateEvent(roomId, StateNotify, stateKey, NotifyEventContent{
-				MinutesAfterMidnight: minutes + hours*60,
+				MinutesAfterMidnight: minutesAfterMidnight,
 			})
 			if err != nil {
 				noticeText = fmt.Sprintf("Failed setting notification time: %s", err)
+			} else {
+				store.SetNotify(sender, minutesAfterMidnight)
 			}
 		}
 	}
 	SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 }
 
-func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
+func HandleMessage(_ mautrix.EventSource, event *mevent.Event, store *store.StateStore) {
 	messageEventContent := event.Content.AsMessage()
 
 	log.Debug("Received message with content: ", messageEventContent.Body)
-
 	body := messageEventContent.Body
 	body = strings.TrimSpace(body)
 	body = strings.TrimPrefix(body, "!")
@@ -182,11 +231,16 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		return
 	}
 
+	store.SetConfigRoom(event.Sender, event.RoomID)
+
 	body = strings.TrimPrefix(body, localpart)
 	body = strings.TrimPrefix(body, ":")
 	body = strings.TrimSpace(body)
 
 	commandParts := strings.Split(body, " ")
+	if len(commandParts) == 1 && commandParts[0] == "" {
+		commandParts[0] = "help"
+	}
 
 	switch strings.ToLower(commandParts[0]) {
 	case "help":
@@ -198,10 +252,22 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		})
 		break
 	case "tz":
-		HandleTimezone(event.RoomID, event.Sender, commandParts[1:])
+		HandleTimezone(event.RoomID, event.Sender, commandParts[1:], store)
 		break
 	case "notify":
-		HandleNotify(event.RoomID, event.Sender, commandParts[1:])
+		HandleNotify(event.RoomID, event.Sender, commandParts[1:], store)
+		break
+	case "new":
+		currentStandupFlows[event.Sender] = BlankStandupFlow()
+		CreatePost(event.RoomID, event.Sender)
+		break
+	case "cancel":
+		if val, found := currentStandupFlows[event.Sender]; !found || val.State == FlowNotStarted {
+			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to cancel."})
+		} else {
+			currentStandupFlows[event.Sender] = BlankStandupFlow()
+			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Standup post cancelled"})
+		}
 		break
 	case "room":
 		// HandleRoom(event.RoomID, event.Sender, commandParts[1:])

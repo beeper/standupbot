@@ -50,8 +50,10 @@ func (store *StateStore) CreateTables() error {
 		`,
 		`
 		CREATE TABLE IF NOT EXISTS user_config_room (
-			user_id            VARCHAR(255) PRIMARY KEY,
-			room_id            VARCHAR(255)
+			user_id                 VARCHAR(255) PRIMARY KEY,
+			room_id                 VARCHAR(255),
+			timezone                VARCHAR(255),
+			minutes_after_midnight  INTEGER
 		)
 		`,
 	}

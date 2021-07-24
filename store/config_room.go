@@ -1,0 +1,125 @@
+package store
+
+import (
+	"time"
+
+	log "github.com/sirupsen/logrus"
+	mid "maunium.net/go/mautrix/id"
+)
+
+// Setting which room to look for as the config room for a given user.
+func (store *StateStore) SetConfigRoom(userID mid.UserID, roomID mid.RoomID) {
+	log.Infof("Setting config room for %s to %s", userID, roomID)
+	tx, err := store.DB.Begin()
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	update := "UPDATE user_config_room SET room_id = ? WHERE user_id = ?"
+	if _, err := tx.Exec(update, roomID, userID); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	insert := "INSERT OR IGNORE INTO user_config_room (room_id, user_id) VALUES (?, ?)"
+	if _, err := tx.Exec(insert, roomID, userID); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
+}
+
+func (store *StateStore) RemoveConfigRoom(roomID mid.RoomID) {
+	log.Infof("Removing all instances of %s from user_config_room", roomID)
+	tx, err := store.DB.Begin()
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	update := "DELETE FROM user_config_room WHERE room_id = ?"
+	if _, err := tx.Exec(update, roomID); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
+}
+
+// Notification time handling
+
+func (store *StateStore) SetTimezone(userID mid.UserID, timezone string) {
+	log.Infof("Setting timezone for %s to %s", userID, timezone)
+	tx, err := store.DB.Begin()
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	update := "UPDATE user_config_room SET timezone = ? WHERE user_id = ?"
+	if _, err := tx.Exec(update, timezone, userID); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
+}
+
+func (store *StateStore) SetNotify(userID mid.UserID, minutesAfterMidnight int) {
+	log.Infof("Setting timezone for %s to %d", userID, minutesAfterMidnight)
+	tx, err := store.DB.Begin()
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	update := "UPDATE user_config_room SET minutes_after_midnight = ? WHERE user_id = ?"
+	if _, err := tx.Exec(update, minutesAfterMidnight, userID); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
+}
+
+func (store *StateStore) GetNotifyUsersForMinutesAfterUtc() map[int]map[mid.UserID]mid.RoomID {
+	notifyTimes := make(map[int]map[mid.UserID]mid.RoomID)
+
+	query := `
+			SELECT user_id, room_id, timezone, minutes_after_midnight
+			FROM user_config_room
+		`
+	rows, err := store.DB.Query(query)
+	if err != nil {
+		return notifyTimes
+	}
+	defer rows.Close()
+
+	var userID mid.UserID
+	var roomID mid.RoomID
+	var timezone string
+	var minutesAfterMidnight int
+	for rows.Next() {
+		if err := rows.Scan(&userID, &roomID, &timezone, &minutesAfterMidnight); err == nil {
+			location, err := time.LoadLocation(timezone)
+			if err != nil {
+				continue
+			}
+			now := time.Now()
+			midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+			notifyTime := midnight.Add(time.Duration(minutesAfterMidnight) * time.Minute)
+
+			h, m, _ := notifyTime.UTC().Clock()
+			minutesAfterUtcMidnight := h*60 + m
+
+			if _, exists := notifyTimes[minutesAfterUtcMidnight]; !exists {
+				notifyTimes[minutesAfterUtcMidnight] = make(map[mid.UserID]mid.RoomID)
+			}
+			notifyTimes[minutesAfterUtcMidnight][userID] = roomID
+		}
+	}
+
+	return notifyTimes
+}
