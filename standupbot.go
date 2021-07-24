@@ -114,6 +114,8 @@ func main() {
 	// set the client store on the client.
 	client.Store = stateStore
 
+	// TODO load state from all of the rooms that we are joined to in case the database died.
+
 	// Make sure to exit cleanly
 	c := make(chan os.Signal, 1)
 	signal.Notify(c,
@@ -193,11 +195,9 @@ func main() {
 		stateStore.SetEncryptionEvent(event)
 	})
 
-	syncer.OnEventType(mevent.EventReaction, func(_ mautrix.EventSource, event *mevent.Event) {
-		log.Infof("REACTION %+v", event)
-	})
+	syncer.OnEventType(mevent.EventReaction, func(source mautrix.EventSource, event *mevent.Event) { go HandleReaction(source, event) })
 
-	syncer.OnEventType(mevent.EventMessage, func(source mautrix.EventSource, event *mevent.Event) { go HandleMessage(source, event, stateStore) })
+	syncer.OnEventType(mevent.EventMessage, func(source mautrix.EventSource, event *mevent.Event) { go HandleMessage(source, event) })
 
 	syncer.OnEventType(mevent.EventEncrypted, func(source mautrix.EventSource, event *mevent.Event) {
 		decryptedEvent, err := olmMachine.DecryptMegolmEvent(event)
@@ -206,7 +206,9 @@ func main() {
 		} else {
 			log.Debug("Received encrypted event: ", decryptedEvent.Content.Raw)
 			if decryptedEvent.Type == mevent.EventMessage {
-				go HandleMessage(source, decryptedEvent, stateStore)
+				go HandleMessage(source, decryptedEvent)
+			} else if decryptedEvent.Type == mevent.EventReaction {
+				go HandleReaction(source, decryptedEvent)
 			}
 		}
 	})

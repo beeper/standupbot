@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	_ "strconv"
 	"time"
 
@@ -25,6 +26,7 @@ func DoRetry(description string, fn func() (interface{}, error)) (interface{}, e
 		log.Debugf("  %s failed. Retrying in %d seconds...", description, nextDuration.Seconds())
 		if stop {
 			log.Debugf("  %s failed. Retry limit reached. Will not retry.", description)
+			err = errors.New("%s failed. Retry limit reached. Will not retry.")
 			break
 		}
 		time.Sleep(nextDuration)

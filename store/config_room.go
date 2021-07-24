@@ -84,6 +84,32 @@ func (store *StateStore) SetNotify(userID mid.UserID, minutesAfterMidnight int) 
 	tx.Commit()
 }
 
+func (store *StateStore) SetSendRoomId(userID mid.UserID, sendRoomID mid.RoomID) {
+	log.Infof("Setting send room ID for %s to %d", userID, sendRoomID.String())
+	tx, err := store.DB.Begin()
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	update := "UPDATE user_config_room SET send_room_id = ? WHERE user_id = ?"
+	if _, err := tx.Exec(update, sendRoomID.String(), userID); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	tx.Commit()
+}
+
+func (store *StateStore) GetSendRoomId(userID mid.UserID) mid.RoomID {
+	row := store.DB.QueryRow("SELECT send_room_id FROM user_config_room WHERE user_id = ?", userID)
+	var sendRoomId mid.RoomID
+	if err := row.Scan(&sendRoomId); err != nil {
+		return ""
+	}
+	return sendRoomId
+}
+
 func (store *StateStore) GetNotifyUsersForMinutesAfterUtc() map[int]map[mid.UserID]mid.RoomID {
 	notifyTimes := make(map[int]map[mid.UserID]mid.RoomID)
 

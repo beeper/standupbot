@@ -53,7 +53,8 @@ func (store *StateStore) CreateTables() error {
 			user_id                 VARCHAR(255) PRIMARY KEY,
 			room_id                 VARCHAR(255),
 			timezone                VARCHAR(255),
-			minutes_after_midnight  INTEGER
+			minutes_after_midnight  INTEGER,
+			send_room_id            VARCHAR(255)
 		)
 		`,
 	}
