@@ -64,7 +64,7 @@ func formatList(items []string) (string, string) {
 	return strings.Join(plain, "\n"), strings.Join(html, "")
 }
 
-func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool) mevent.MessageEventContent {
+func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendConfirmation bool) mevent.MessageEventContent {
 	postText := fmt.Sprintf(`%s's standup post:\n\n`, userID)
 	postHtml := fmt.Sprintf(`<a href="https://matrix.to/#/%s">%s</a>'s standup post:<br><br>`, userID, userID)
 
@@ -90,8 +90,12 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool) meven
 	}
 
 	if preview {
-		postText = fmt.Sprintf("Standup post preview:\n\n%s\n\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
-		postHtml = fmt.Sprintf("<i>Standup post preview:<i><br><br>%s<br><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
+		postText = fmt.Sprintf("Standup post preview:\n\n" + postText)
+		postHtml = fmt.Sprintf("<i>Standup post preview:<i><br><br>" + postHtml)
+	}
+	if sendConfirmation {
+		postText = fmt.Sprintf("%s\n\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
+		postHtml = fmt.Sprintf("%s<br><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
 	}
 
 	return mevent.MessageEventContent{
@@ -139,7 +143,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 			currentFlow.State = Notes
 			break
 		case Notes:
-			resp, err := SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true))
+			resp, err := SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, true))
 			if err == nil {
 				SendReaction(event.RoomID, resp.EventID, CHECKMARK)
 				SendReaction(event.RoomID, resp.EventID, RED_X)
@@ -159,7 +163,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 				})
 				return
 			}
-			_, err := SendMessage(sendRoomID, FormatPost(event.Sender, currentFlow, false))
+			_, err := SendMessage(sendRoomID, FormatPost(event.Sender, currentFlow, false, false))
 			if err != nil {
 				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "Failed to send standup post to " + sendRoomID.String()})
 			} else {

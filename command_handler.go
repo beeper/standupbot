@@ -339,7 +339,7 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		break
 	case "show":
 		if currentFlow, found := currentStandupFlows[event.Sender]; found && currentFlow.State != FlowNotStarted {
-			SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true))
+			SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, false))
 		} else {
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "No standup post to show."})
 		}
