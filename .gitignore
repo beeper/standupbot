@@ -2,5 +2,5 @@ bin
 config*.json
 !config.sample.json
 .direnv
-quotes-file-bot
+standupbot
 passwordfile
