@@ -223,11 +223,20 @@ func main() {
 
 			for userID, roomID := range usersForCurrentMinute {
 				log.Infof("Notifying %s", userID)
-				SendMessage(roomID, mevent.MessageEventContent{
-					MsgType: mevent.MsgText,
-					Body:    "Time to write your standup post!",
-				})
-				go CreatePost(roomID, userID)
+				if currentFlow, found := currentStandupFlows[userID]; !found || currentFlow.State == FlowNotStarted {
+					SendMessage(roomID, mevent.MessageEventContent{
+						MsgType: mevent.MsgText,
+						Body:    "Time to write your standup post!",
+					})
+					go CreatePost(roomID, userID)
+				} else {
+					SendMessage(roomID, mevent.MessageEventContent{
+						MsgType:       mevent.MsgText,
+						Body:          "Looks like you are already writing a standup post! If you want to start over, type `!standupbot new`",
+						Format:        mevent.FormatHTML,
+						FormattedBody: "Looks like you are already writing a standup post! If you want to start over, type <code>!standupbot new</code>",
+					})
+				}
 			}
 
 			// Sleep until the next minute comes around

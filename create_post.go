@@ -46,6 +46,9 @@ func CreatePost(roomID mid.RoomID, userID mid.UserID) {
 		log.Error("Failed to send notice for asking what they did yesterday!")
 		return
 	}
+	if _, found := currentStandupFlows[userID]; !found {
+		currentStandupFlows[userID] = BlankStandupFlow()
+	}
 	currentStandupFlows[userID].State = Yesterday
 	currentStandupFlows[userID].ReactableEvents = append(currentStandupFlows[userID].ReactableEvents, resp.EventID)
 }
@@ -88,7 +91,7 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool) meven
 
 	if preview {
 		postText = fmt.Sprintf("Standup post preview:\n\n%s\n\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
-		postHtml = fmt.Sprintf("<i>Standup post preview:<i><br><br>%s<br><br><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
+		postHtml = fmt.Sprintf("<i>Standup post preview:<i><br><br>%s<br><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
 	}
 
 	return mevent.MessageEventContent{
