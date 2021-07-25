@@ -153,7 +153,6 @@ func main() {
 				}
 			}
 		}
-
 	}
 
 	// Make sure to exit cleanly
@@ -259,7 +258,7 @@ func main() {
 		for {
 			h, m, _ := time.Now().UTC().Clock()
 			currentMinutesAfterMidnight := h*60 + m
-			usersForCurrentMinute := stateStore.GetNotifyUsersForMinutesAfterUtc()[currentMinutesAfterMidnight]
+			usersForCurrentMinute := stateStore.GetNotifyUsersForMinutesAfterUtcForToday()[currentMinutesAfterMidnight]
 
 			for userID, roomID := range usersForCurrentMinute {
 				log.Infof("Notifying %s", userID)

@@ -110,7 +110,7 @@ func (store *StateStore) GetSendRoomId(userID mid.UserID) mid.RoomID {
 	return sendRoomId
 }
 
-func (store *StateStore) GetNotifyUsersForMinutesAfterUtc() map[int]map[mid.UserID]mid.RoomID {
+func (store *StateStore) GetNotifyUsersForMinutesAfterUtcForToday() map[int]map[mid.UserID]mid.RoomID {
 	notifyTimes := make(map[int]map[mid.UserID]mid.RoomID)
 
 	query := `
@@ -135,6 +135,13 @@ func (store *StateStore) GetNotifyUsersForMinutesAfterUtc() map[int]map[mid.User
 			}
 			now := time.Now()
 			midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+
+			// Don't add a notification time if it's on the weekend
+			if midnight.Weekday() == time.Saturday || midnight.Weekday() == time.Sunday {
+				log.Debugf("It is the weekend in %s, not including the notification time in the dictionary.", location)
+				continue
+			}
+
 			notifyTime := midnight.Add(time.Duration(minutesAfterMidnight) * time.Minute)
 
 			h, m, _ := notifyTime.UTC().Clock()
