@@ -159,7 +159,7 @@ func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
 	})
 	noticeText := fmt.Sprintf("Timezone set to %s", location.String())
 	if err != nil {
-		noticeText = fmt.Sprintf("Failed setting timezone: %s", err)
+		noticeText = fmt.Sprintf("Failed setting timezone: %s\nCheck to make sure that standupbot is a mod/admin in the room!", err)
 	} else {
 		stateStore.SetTimezone(sender, location.String())
 	}
@@ -209,7 +209,7 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 				MinutesAfterMidnight: minutesAfterMidnight,
 			})
 			if err != nil {
-				noticeText = fmt.Sprintf("Failed setting notification time: %s", err)
+				noticeText = fmt.Sprintf("Failed setting notification time: %s\nCheck to make sure that standupbot is a mod/admin in the room!", err)
 			} else {
 				stateStore.SetNotify(sender, minutesAfterMidnight)
 			}
@@ -261,7 +261,7 @@ func HandleRoom(roomID mid.RoomID, sender mid.UserID, params []string) {
 			SendRoomID: sendRoomID,
 		})
 		if err != nil {
-			noticeText = fmt.Sprintf("Failed setting send room: %s", err)
+			noticeText = fmt.Sprintf("Failed setting send room: %s\nCheck to make sure that standupbot is a mod/admin in the room!", err)
 		} else {
 			stateStore.SetSendRoomId(sender, sendRoomID)
 		}
