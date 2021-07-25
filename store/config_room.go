@@ -9,7 +9,7 @@ import (
 
 // Setting which room to look for as the config room for a given user.
 func (store *StateStore) SetConfigRoom(userID mid.UserID, roomID mid.RoomID) {
-	log.Infof("Setting config room for %s to %s", userID, roomID)
+	log.Debugf("Setting config room for %s to %s", userID, roomID)
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
@@ -32,7 +32,7 @@ func (store *StateStore) SetConfigRoom(userID mid.UserID, roomID mid.RoomID) {
 }
 
 func (store *StateStore) RemoveConfigRoom(roomID mid.RoomID) {
-	log.Infof("Removing all instances of %s from user_config_room", roomID)
+	log.Debugf("Removing all instances of %s from user_config_room", roomID)
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
@@ -51,7 +51,7 @@ func (store *StateStore) RemoveConfigRoom(roomID mid.RoomID) {
 // Notification time handling
 
 func (store *StateStore) SetTimezone(userID mid.UserID, timezone string) {
-	log.Infof("Setting timezone for %s to %s", userID, timezone)
+	log.Debugf("Setting timezone for %s to %s", userID, timezone)
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
@@ -68,7 +68,7 @@ func (store *StateStore) SetTimezone(userID mid.UserID, timezone string) {
 }
 
 func (store *StateStore) SetNotify(userID mid.UserID, minutesAfterMidnight int) {
-	log.Infof("Setting timezone for %s to %d", userID, minutesAfterMidnight)
+	log.Debugf("Setting timezone for %s to %d", userID, minutesAfterMidnight)
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
@@ -85,7 +85,7 @@ func (store *StateStore) SetNotify(userID mid.UserID, minutesAfterMidnight int) 
 }
 
 func (store *StateStore) SetSendRoomId(userID mid.UserID, sendRoomID mid.RoomID) {
-	log.Infof("Setting send room ID for %s to %s", userID, sendRoomID.String())
+	log.Debugf("Setting send room ID for %s to %s", userID, sendRoomID.String())
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()

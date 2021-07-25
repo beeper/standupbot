@@ -51,7 +51,7 @@ func (store *StateStore) FindSharedRooms(userId mid.UserID) []mid.RoomID {
 }
 
 func (store *StateStore) SetMembership(event *mevent.Event) {
-	log.Infof("Updating room_members for %s", event.RoomID)
+	log.Debugf("Updating room_members for %s", event.RoomID)
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
@@ -104,7 +104,7 @@ func (store *StateStore) upsertEncryptionEvent(roomId mid.RoomID, encryptionEven
 }
 
 func (store *StateStore) SetEncryptionEvent(event *mevent.Event) {
-	log.Infof("Updating encryption_event for %s", event.RoomID)
+	log.Debugf("Updating encryption_event for %s", event.RoomID)
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()

@@ -13,7 +13,7 @@ func (store *StateStore) GetAccessToken() (string, error) {
 }
 
 func (store *StateStore) SetAccessToken(accessToken string) error {
-	log.Info("Upserting row into standupbot_meta")
+	log.Debug("Upserting row into standupbot_meta")
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()

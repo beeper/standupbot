@@ -11,7 +11,7 @@ import (
 )
 
 func (store *StateStore) SaveFilterID(userID mid.UserID, filterID string) {
-	log.Info("Upserting row into user_filter_ids")
+	log.Debug("Upserting row into user_filter_ids")
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
@@ -43,7 +43,7 @@ func (store *StateStore) LoadFilterID(userID mid.UserID) string {
 }
 
 func (store *StateStore) SaveNextBatch(userID mid.UserID, nextBatchToken string) {
-	log.Info("Upserting row into user_batch_tokens")
+	log.Debug("Upserting row into user_batch_tokens")
 	tx, err := store.DB.Begin()
 	if err != nil {
 		tx.Rollback()
