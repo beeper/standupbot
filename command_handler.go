@@ -277,6 +277,13 @@ func HandleRoom(roomID mid.RoomID, sender mid.UserID, params []string) {
 }
 
 func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
+	userId := mid.UserID(configuration.Username)
+	localpart, _, _ := userId.ParseAndDecode()
+
+	if event.Sender == userId {
+		return
+	}
+
 	messageEventContent := event.Content.AsMessage()
 
 	log.Debug("Received message with content: ", messageEventContent.Body)
@@ -285,10 +292,8 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	body = strings.TrimPrefix(body, "!")
 	body = strings.TrimPrefix(body, "@")
 
-	userId := mid.UserID(configuration.Username)
-	localpart, _, _ := userId.ParseAndDecode()
-
 	log.Debug("userid: ", localpart)
+	log.Debug( !strings.HasPrefix(body, localpart) ,!strings.HasPrefix(body, "su"))
 	if !strings.HasPrefix(body, localpart) && !strings.HasPrefix(body, "su") {
 		if val, found := currentStandupFlows[event.Sender]; found {
 			switch val.State {
