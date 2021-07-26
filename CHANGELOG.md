@@ -1,3 +1,7 @@
+# v0.1.4
+
+* Bug fix: prevent bot from responding to itself
+
 # v0.1.3
 
 * Prompt for Friday, Weekend on Monday
