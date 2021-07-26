@@ -110,6 +110,19 @@ func (store *StateStore) GetSendRoomId(userID mid.UserID) mid.RoomID {
 	return sendRoomId
 }
 
+func (store *StateStore) GetCurrentWeekdayInUserTimezone(userID mid.UserID) time.Weekday {
+	row := store.DB.QueryRow("SELECT timezone FROM user_config_room WHERE user_id = ?", userID)
+	var timezone string
+	if err := row.Scan(&timezone); err != nil {
+		return time.Now().UTC().Weekday()
+	}
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return time.Now().UTC().Weekday()
+	}
+	return time.Now().In(location).Weekday()
+}
+
 func (store *StateStore) GetNotifyUsersForMinutesAfterUtcForToday() map[int]map[mid.UserID]mid.RoomID {
 	notifyTimes := make(map[int]map[mid.UserID]mid.RoomID)
 

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"maunium.net/go/mautrix"
@@ -36,20 +37,28 @@ func CreatePost(roomID mid.RoomID, userID mid.UserID) {
 		log.Debug("Couldn't find previous standup info.")
 	}
 
+	nextState := Yesterday
+	dayText := "yesterday"
+
+	if stateStore.GetCurrentWeekdayInUserTimezone(userID) == time.Monday {
+		nextState = Friday
+		dayText = "Friday"
+	}
+
 	resp, err := sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
 		MsgType:       mevent.MsgText,
-		Body:          "What did you do yesterday? Enter one item per-line. React with ✅ when done.",
+		Body:          fmt.Sprintf("What did you do %s? Enter one item per-line. React with ✅ when done.", dayText),
 		Format:        mevent.FormatHTML,
-		FormattedBody: "What did you do yesterday? <i>Enter one item per-line. React with ✅ when done.</i>",
+		FormattedBody: fmt.Sprintf("What did you do %s? <i>Enter one item per-line. React with ✅ when done.</i>", dayText),
 	})
 	if err != nil {
-		log.Error("Failed to send notice for asking what they did yesterday!")
+		log.Errorf("Failed to send notice for asking what they did %s!", dayText)
 		return
 	}
 	if _, found := currentStandupFlows[userID]; !found {
 		currentStandupFlows[userID] = BlankStandupFlow()
 	}
-	currentStandupFlows[userID].State = Yesterday
+	currentStandupFlows[userID].State = nextState
 	currentStandupFlows[userID].ReactableEvents = append(currentStandupFlows[userID].ReactableEvents, resp.EventID)
 }
 
@@ -72,6 +81,16 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendC
 		plain, html := formatList(standupFlow.Yesterday)
 		postText += "**Yesterday**\n" + plain
 		postHtml += "<b>Yesterday</b><br><ul>" + html + "</ul>"
+	}
+	if len(standupFlow.Friday) > 0 {
+		plain, html := formatList(standupFlow.Friday)
+		postText += "\n**Friday**\n" + plain
+		postHtml += "<b>Friday</b><br><ul>" + html + "</ul>"
+	}
+	if len(standupFlow.Weekend) > 0 {
+		plain, html := formatList(standupFlow.Weekend)
+		postText += "\n**Weekend**\n" + plain
+		postHtml += "<b>Weekend</b><br><ul>" + html + "</ul>"
 	}
 	if len(standupFlow.Today) > 0 {
 		plain, html := formatList(standupFlow.Today)
@@ -131,6 +150,14 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 
 		switch currentFlow.State {
 		case Yesterday:
+			question = "What are you planning to do today?"
+			currentFlow.State = Today
+			break
+		case Friday:
+			question = "What did you do over the weekend?"
+			currentFlow.State = Weekend
+			break
+		case Weekend:
 			question = "What are you planning to do today?"
 			currentFlow.State = Today
 			break

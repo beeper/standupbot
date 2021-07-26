@@ -19,6 +19,8 @@ type StandupFlowState int
 const (
 	FlowNotStarted StandupFlowState = iota
 	Yesterday
+	Friday
+	Weekend
 	Today
 	Blockers
 	Notes
@@ -29,6 +31,8 @@ type StandupFlow struct {
 	State           StandupFlowState
 	ReactableEvents []mid.EventID
 	Yesterday       []string
+	Friday          []string
+	Weekend         []string
 	Today           []string
 	Blockers        []string
 	Notes           []string
@@ -41,6 +45,8 @@ func BlankStandupFlow() *StandupFlow {
 		State:           FlowNotStarted,
 		ReactableEvents: make([]mid.EventID, 0),
 		Yesterday:       make([]string, 0),
+		Friday:          make([]string, 0),
+		Weekend:         make([]string, 0),
 		Today:           make([]string, 0),
 		Blockers:        make([]string, 0),
 		Notes:           make([]string, 0),
@@ -288,6 +294,12 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			switch val.State {
 			case Yesterday:
 				val.Yesterday = append(val.Yesterday, body)
+				break
+			case Friday:
+				val.Friday = append(val.Friday, body)
+				break
+			case Weekend:
+				val.Weekend = append(val.Weekend, body)
 				break
 			case Today:
 				val.Today = append(val.Today, body)
