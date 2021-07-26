@@ -1,3 +1,9 @@
+# v0.1.3
+
+* Prompt for Friday, Weekend on Monday
+  ([#1](https://todo.sr.ht/~sumner/standupbot/1))
+* Add !su short command ([#3](https://todo.sr.ht/~sumner/standupbot/3))
+
 # v0.1.2
 
 * Don't notify on the weekends.
