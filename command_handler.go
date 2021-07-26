@@ -289,7 +289,7 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	localpart, _, _ := userId.ParseAndDecode()
 
 	log.Debug("userid: ", localpart)
-	if !strings.HasPrefix(body, localpart) {
+	if !strings.HasPrefix(body, localpart) && !strings.HasPrefix(body, "su") {
 		if val, found := currentStandupFlows[event.Sender]; found {
 			switch val.State {
 			case Yesterday:
@@ -322,6 +322,7 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	stateStore.SetConfigRoom(event.Sender, event.RoomID)
 
 	body = strings.TrimPrefix(body, localpart)
+	body = strings.TrimPrefix(body, "su")
 	body = strings.TrimPrefix(body, ":")
 	body = strings.TrimSpace(body)
 
@@ -331,9 +332,6 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	}
 
 	switch strings.ToLower(commandParts[0]) {
-	case "help":
-		SendHelp(event.RoomID)
-		break
 	case "vanquish":
 		DoRetry("leave room", func() (interface{}, error) {
 			return client.LeaveRoom(event.RoomID)
@@ -366,6 +364,9 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		break
 	case "room":
 		HandleRoom(event.RoomID, event.Sender, commandParts[1:])
+		break
+	default:
+		SendHelp(event.RoomID)
 		break
 	}
 }
