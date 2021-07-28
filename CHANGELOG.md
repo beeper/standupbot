@@ -1,3 +1,7 @@
+# v0.1.5
+
+* Bug fix: start with blank standup post on notify
+
 # v0.1.4
 
 * Bug fix: prevent bot from responding to itself

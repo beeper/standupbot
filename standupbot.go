@@ -267,6 +267,7 @@ func main() {
 						MsgType: mevent.MsgText,
 						Body:    "Time to write your standup post!",
 					})
+					currentStandupFlows[userID] = BlankStandupFlow()
 					go CreatePost(roomID, userID)
 				} else {
 					SendMessage(roomID, mevent.MessageEventContent{
