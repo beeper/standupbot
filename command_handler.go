@@ -271,11 +271,11 @@ func HandleRoom(roomID mid.RoomID, sender mid.UserID, params []string) {
 	respJoinRoom, err := DoRetry("join room", func() (interface{}, error) {
 		return client.JoinRoom(roomIdToJoin, serverName, nil)
 	})
-	sendRoomID := respJoinRoom.(*mautrix.RespJoinRoom).RoomID
 	noticeText := ""
 	if err != nil {
 		noticeText = fmt.Sprintf("Could not join room %s: %s", roomIdToJoin, err)
 	} else {
+		sendRoomID := respJoinRoom.(*mautrix.RespJoinRoom).RoomID
 		noticeText = fmt.Sprintf("Joined %s and set that as your send room", roomIdToJoin)
 		_, err := client.SendStateEvent(roomID, StateSendRoom, stateKey, SendRoomEventContent{
 			SendRoomID: sendRoomID,
@@ -429,7 +429,14 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	body = strings.TrimPrefix(body, ":")
 	body = strings.TrimSpace(body)
 
-	commandParts := strings.Split(body, " ")
+	commandPartsRaw := strings.Split(strings.TrimSpace(body), " ")
+	commandParts := make([]string, 0, len(commandPartsRaw))
+	for _, part := range commandPartsRaw {
+		if len(part) > 0 {
+			commandParts = append(commandParts, part)
+		}
+	}
+
 	if len(commandParts) == 1 && commandParts[0] == "" {
 		commandParts[0] = "help"
 	}

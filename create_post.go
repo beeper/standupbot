@@ -216,6 +216,23 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 				})
 				return
 			}
+
+			found := false
+			for _, userID := range stateStore.GetRoomMembers(sendRoomID) {
+				if event.Sender == userID {
+					found = true
+				}
+			}
+			if !found {
+				SendMessage(event.RoomID, mevent.MessageEventContent{
+					MsgType:       mevent.MsgText,
+					Body:          "You are not a member of the configured send room! Refusing to send a message to the room. Set a new one using `!standupbot room [room ID or alias]`.",
+					Format:        mevent.FormatHTML,
+					FormattedBody: "<b>You are not a member of the configured send room!</b> Refusing to send a message to the room. Set a new one using <code>!standupbot room [room ID or alias]</code>.",
+				})
+				return
+			}
+
 			_, err := SendMessage(sendRoomID, FormatPost(event.Sender, currentFlow, false, false))
 			if err != nil {
 				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "Failed to send standup post to " + sendRoomID.String()})
