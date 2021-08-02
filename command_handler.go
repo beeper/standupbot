@@ -27,15 +27,21 @@ const (
 	Confirm
 )
 
+type StandupItem struct {
+	EventID       mid.EventID
+	Body          string
+	FormattedBody string
+}
+
 type StandupFlow struct {
 	State           StandupFlowState
 	ReactableEvents []mid.EventID
-	Yesterday       []string
-	Friday          []string
-	Weekend         []string
-	Today           []string
-	Blockers        []string
-	Notes           []string
+	Yesterday       []StandupItem
+	Friday          []StandupItem
+	Weekend         []StandupItem
+	Today           []StandupItem
+	Blockers        []StandupItem
+	Notes           []StandupItem
 }
 
 var currentStandupFlows map[mid.UserID]*StandupFlow = make(map[mid.UserID]*StandupFlow)
@@ -44,12 +50,12 @@ func BlankStandupFlow() *StandupFlow {
 	return &StandupFlow{
 		State:           FlowNotStarted,
 		ReactableEvents: make([]mid.EventID, 0),
-		Yesterday:       make([]string, 0),
-		Friday:          make([]string, 0),
-		Weekend:         make([]string, 0),
-		Today:           make([]string, 0),
-		Blockers:        make([]string, 0),
-		Notes:           make([]string, 0),
+		Yesterday:       make([]StandupItem, 0),
+		Friday:          make([]StandupItem, 0),
+		Weekend:         make([]StandupItem, 0),
+		Today:           make([]StandupItem, 0),
+		Blockers:        make([]StandupItem, 0),
+		Notes:           make([]StandupItem, 0),
 	}
 }
 
@@ -74,6 +80,7 @@ func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *m
 				return nil, err
 			}
 
+			encrypted.RelatesTo = content.RelatesTo
 			return client.SendMessageEvent(roomId, mevent.EventEncrypted, encrypted)
 		} else {
 			log.Debugf("Sending event to %s unencrypted: %+v", roomId, content)
@@ -293,27 +300,114 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	body = strings.TrimPrefix(body, "@")
 
 	log.Debug("userid: ", localpart)
-	log.Debug( !strings.HasPrefix(body, localpart) ,!strings.HasPrefix(body, "su"))
+	log.Debug(!strings.HasPrefix(body, localpart), !strings.HasPrefix(body, "su"))
 	if !strings.HasPrefix(body, localpart) && !strings.HasPrefix(body, "su") {
 		if val, found := currentStandupFlows[event.Sender]; found {
+			// If this is an edit of one of the messages that is in
+			// the set of reactable messages, then
+			relatesTo := messageEventContent.RelatesTo
+			if relatesTo != nil && relatesTo.Type == mevent.RelReplace {
+				log.Print(relatesTo, relatesTo.Type, relatesTo.EventID)
+				log.Print(val.Yesterday)
+				for i, item := range val.Yesterday {
+					if item.EventID == relatesTo.EventID {
+						val.Yesterday[i].EventID = item.EventID
+						val.Yesterday[i].Body = messageEventContent.NewContent.Body
+						val.Yesterday[i].FormattedBody = messageEventContent.NewContent.FormattedBody
+						break
+					}
+				}
+				for i, item := range val.Friday {
+					if item.EventID == relatesTo.EventID {
+						val.Friday[i].EventID = item.EventID
+						val.Friday[i].Body = messageEventContent.NewContent.Body
+						val.Friday[i].FormattedBody = messageEventContent.NewContent.FormattedBody
+						break
+					}
+				}
+				for i, item := range val.Weekend {
+					if item.EventID == relatesTo.EventID {
+						val.Weekend[i].EventID = item.EventID
+						val.Weekend[i].Body = messageEventContent.NewContent.Body
+						val.Weekend[i].FormattedBody = messageEventContent.NewContent.FormattedBody
+						break
+					}
+				}
+				for i, item := range val.Today {
+					if item.EventID == relatesTo.EventID {
+						val.Today[i].EventID = item.EventID
+						val.Today[i].Body = messageEventContent.NewContent.Body
+						val.Today[i].FormattedBody = messageEventContent.NewContent.FormattedBody
+						break
+					}
+				}
+				for i, item := range val.Blockers {
+					if item.EventID == relatesTo.EventID {
+						val.Blockers[i].EventID = item.EventID
+						val.Blockers[i].Body = messageEventContent.NewContent.Body
+						val.Blockers[i].FormattedBody = messageEventContent.NewContent.FormattedBody
+						break
+					}
+				}
+				for i, item := range val.Notes {
+					if item.EventID == relatesTo.EventID {
+						val.Notes[i].EventID = item.EventID
+						val.Notes[i].Body = messageEventContent.NewContent.Body
+						val.Notes[i].FormattedBody = messageEventContent.NewContent.FormattedBody
+						break
+					}
+				}
+
+				if val.State == Confirm {
+					// There should only be a single event
+					// ID that is reactable, and that event
+					// ID should be the standup post
+					// preview. Thus, edit it with the most
+					// recent updates to val.
+					currentPreviewEventId := val.ReactableEvents[len(val.ReactableEvents)-1]
+
+					newPost := FormatPost(event.Sender, val, true, true)
+					resp, _ := SendMessage(event.RoomID, mevent.MessageEventContent{
+						MsgType:       mevent.MsgText,
+						Body:          " * " + newPost.Body,
+						Format:        mevent.FormatHTML,
+						FormattedBody: " * " + newPost.FormattedBody,
+						RelatesTo: &mevent.RelatesTo{
+							Type:    mevent.RelReplace,
+							EventID: currentPreviewEventId,
+						},
+						NewContent: &newPost,
+					})
+					val.ReactableEvents = append(currentStandupFlows[event.Sender].ReactableEvents, resp.EventID)
+				}
+
+				return
+			}
+
+			standupItem := StandupItem{
+				EventID:       event.ID,
+				Body:          messageEventContent.Body,
+				FormattedBody: messageEventContent.FormattedBody,
+			}
+
 			switch val.State {
 			case Yesterday:
-				val.Yesterday = append(val.Yesterday, body)
+				val.Yesterday = append(val.Yesterday, standupItem)
 				break
 			case Friday:
-				val.Friday = append(val.Friday, body)
+				val.Friday = append(val.Friday, standupItem)
 				break
 			case Weekend:
-				val.Weekend = append(val.Weekend, body)
+				val.Weekend = append(val.Weekend, standupItem)
 				break
 			case Today:
-				val.Today = append(val.Today, body)
+				val.Today = append(val.Today, standupItem)
 				break
 			case Blockers:
-				val.Blockers = append(val.Blockers, body)
+				val.Blockers = append(val.Blockers, standupItem)
 				break
 			case Notes:
-				val.Notes = append(val.Notes, body)
+				val.Notes = append(val.Notes, standupItem)
 				break
 			default:
 				return
@@ -321,6 +415,8 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			SendReaction(event.RoomID, event.ID, CHECKMARK)
 			val.ReactableEvents = append(val.ReactableEvents, event.ID)
 		}
+
+		// This is not a bot command. Return.
 		return
 	}
 

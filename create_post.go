@@ -62,12 +62,15 @@ func CreatePost(roomID mid.RoomID, userID mid.UserID) {
 	currentStandupFlows[userID].ReactableEvents = append(currentStandupFlows[userID].ReactableEvents, resp.EventID)
 }
 
-func formatList(items []string) (string, string) {
+func formatList(items []StandupItem) (string, string) {
 	plain := make([]string, 0)
 	html := make([]string, 0)
 	for _, item := range items {
-		plain = append(plain, fmt.Sprintf("- %s", item))
-		html = append(html, fmt.Sprintf("<li>%s</li>", item))
+		plain = append(plain, fmt.Sprintf("- %s", item.Body))
+		if item.FormattedBody == "" {
+			item.FormattedBody = item.Body
+		}
+		html = append(html, fmt.Sprintf("<li>%s</li>", item.FormattedBody))
 	}
 
 	return strings.Join(plain, "\n"), strings.Join(html, "")
@@ -110,11 +113,11 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendC
 
 	if preview {
 		postText = fmt.Sprintf("Standup post preview:\n\n" + postText)
-		postHtml = fmt.Sprintf("<i>Standup post preview:<i><br><br>" + postHtml)
+		postHtml = fmt.Sprintf("<i>Standup post preview:</i><br><br>" + postHtml)
 	}
 	if sendConfirmation {
-		postText = fmt.Sprintf("%s\n\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
-		postHtml = fmt.Sprintf("%s<br><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
+		postText = fmt.Sprintf("%s\n\n---\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
+		postHtml = fmt.Sprintf("%s<hr><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
 	}
 
 	return mevent.MessageEventContent{
