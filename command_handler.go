@@ -119,7 +119,9 @@ func SendHelp(roomId mid.RoomID) {
 * vanquish -- tell the bot to leave the room
 * tz [timezone] -- show or set the timezone to use for configuring notifications
 * notify [time] -- show or set the time at which the standup notification will be sent
-* room [room alias or ID] -- show or set the room where your standup notification will be sent`
+* room [room alias or ID] -- show or set the room where your standup notification will be sent
+
+Version %s. Source code: https://sr.ht/~sumner/standupbot/`
 	noticeHtml := `<b>COMMANDS:</b>
 <ul>
 <li><b>new</b> &mdash; prepare a new standup post</li>
@@ -131,13 +133,15 @@ func SendHelp(roomId mid.RoomID) {
 <li><b>tz [timezone]</b> &mdash; show or set the timezone to use for configuring notifications</li>
 <li><b>notify [time]</b> &mdash; show or set the time at which the standup notification will be sent</li>
 <li><b>room [room alias or ID]</b> &mdash; show or set the room where your standup notification will be sent</li>
-</ul>`
+</ul>
+
+Version %s. <a href="https://sr.ht/~sumner/standupbot/">Source code</a>.`
 
 	SendMessage(roomId, mevent.MessageEventContent{
 		MsgType:       mevent.MsgNotice,
-		Body:          noticeText,
+		Body:          fmt.Sprintf(noticeText, VERSION),
 		Format:        mevent.FormatHTML,
-		FormattedBody: noticeHtml,
+		FormattedBody: fmt.Sprintf(noticeHtml, VERSION),
 	})
 }
 

@@ -27,6 +27,8 @@ var configuration Configuration
 var olmMachine *mcrypto.OlmMachine
 var stateStore *store.StateStore
 
+var VERSION = "0.2.0"
+
 func main() {
 	// Arg parsing
 	configPath := flag.String("config", xdg.ConfigHome()+"/standupbot/config.json", "config file location")
