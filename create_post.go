@@ -29,6 +29,46 @@ func sendMessageWithCheckmarkReaction(roomID mid.RoomID, message mevent.MessageE
 	return resp, nil
 }
 
+func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowState) {
+	var question string
+	switch state {
+	case Friday:
+		question = "What did you do Friday?"
+		break
+	case Weekend:
+		question = "What did you do over the weekend?"
+		break
+	case Yesterday:
+		question = "What did you do yesterday?"
+		break
+	case Today:
+		question = "What are you planning to do today?"
+		break
+	case Blockers:
+		question = "Do you have any blockers?"
+		break
+	case Notes:
+		question = "Do you have any other notes?"
+		break
+	}
+
+	resp, err := sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
+		MsgType:       mevent.MsgText,
+		Body:          fmt.Sprintf("%s Enter one item per-line. React with ✅ when done.", question),
+		Format:        mevent.FormatHTML,
+		FormattedBody: fmt.Sprintf("%s <i>Enter one item per-line. React with ✅ when done.</i>", question),
+	})
+	if err != nil {
+		log.Errorf("Failed to send notice asking '%s'!", question)
+		return
+	}
+	if _, found := currentStandupFlows[userID]; !found {
+		currentStandupFlows[userID] = BlankStandupFlow()
+	}
+	currentStandupFlows[userID].State = state
+	currentStandupFlows[userID].ReactableEvents = append(currentStandupFlows[userID].ReactableEvents, resp.EventID)
+}
+
 func CreatePost(roomID mid.RoomID, userID mid.UserID) {
 	stateKey := strings.TrimPrefix(userID.String(), "@")
 	var previousStandupEventContent PreviousStandupEventContent
@@ -38,28 +78,11 @@ func CreatePost(roomID mid.RoomID, userID mid.UserID) {
 	}
 
 	nextState := Yesterday
-	dayText := "yesterday"
-
 	if stateStore.GetCurrentWeekdayInUserTimezone(userID) == time.Monday {
 		nextState = Friday
-		dayText = "Friday"
 	}
 
-	resp, err := sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
-		MsgType:       mevent.MsgText,
-		Body:          fmt.Sprintf("What did you do %s? Enter one item per-line. React with ✅ when done.", dayText),
-		Format:        mevent.FormatHTML,
-		FormattedBody: fmt.Sprintf("What did you do %s? <i>Enter one item per-line. React with ✅ when done.</i>", dayText),
-	})
-	if err != nil {
-		log.Errorf("Failed to send notice for asking what they did %s!", dayText)
-		return
-	}
-	if _, found := currentStandupFlows[userID]; !found {
-		currentStandupFlows[userID] = BlankStandupFlow()
-	}
-	currentStandupFlows[userID].State = nextState
-	currentStandupFlows[userID].ReactableEvents = append(currentStandupFlows[userID].ReactableEvents, resp.EventID)
+	GoToStateAndNotify(roomID, userID, nextState)
 }
 
 func formatList(items []StandupItem) (string, string) {
@@ -149,28 +172,27 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 	if reactionEventContent.RelatesTo.Key == CHECKMARK {
 		currentFlow.ReactableEvents = make([]mid.EventID, 0)
 
-		var question string
+		if currentFlow.PreviewEventId.String() != "" && currentFlow.State != Confirm {
+			// this means we have already gone through the flow, and we went back to edit.
+			client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
+			currentFlow.State = Notes
+		}
 
 		switch currentFlow.State {
 		case Yesterday:
-			question = "What are you planning to do today?"
-			currentFlow.State = Today
+			GoToStateAndNotify(event.RoomID, event.Sender, Today)
 			break
 		case Friday:
-			question = "What did you do over the weekend?"
-			currentFlow.State = Weekend
+			GoToStateAndNotify(event.RoomID, event.Sender, Weekend)
 			break
 		case Weekend:
-			question = "What are you planning to do today?"
-			currentFlow.State = Today
+			GoToStateAndNotify(event.RoomID, event.Sender, Today)
 			break
 		case Today:
-			question = "Do you have any blockers?"
-			currentFlow.State = Blockers
+			GoToStateAndNotify(event.RoomID, event.Sender, Blockers)
 			break
 		case Blockers:
-			question = "Do you have any other notes?"
-			currentFlow.State = Notes
+			GoToStateAndNotify(event.RoomID, event.Sender, Notes)
 			break
 		case Notes:
 			resp, err := SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, true))
@@ -179,6 +201,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 				SendReaction(event.RoomID, resp.EventID, RED_X)
 			}
 			currentFlow.State = Confirm
+			currentFlow.PreviewEventId = resp.EventID
 			currentStandupFlows[event.Sender].ReactableEvents =
 				append(currentStandupFlows[event.Sender].ReactableEvents, resp.EventID)
 			return
@@ -201,23 +224,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 				currentFlow.State = FlowNotStarted
 			}
 			return
-		default:
-			currentFlow.State = FlowNotStarted
-			break
 		}
-
-		resp, err := sendMessageWithCheckmarkReaction(event.RoomID, mevent.MessageEventContent{
-			MsgType:       mevent.MsgText,
-			Body:          fmt.Sprintf("%s Enter one item per-line. React with ✅ when done.", question),
-			Format:        mevent.FormatHTML,
-			FormattedBody: fmt.Sprintf("%s <i>Enter one item per-line. React with ✅ when done.</i>", question),
-		})
-		if err != nil {
-			log.Errorf("Failed to send notice for asking %s what they plan to do today!", event.Sender)
-			return
-		}
-		currentStandupFlows[event.Sender].ReactableEvents =
-			append(currentStandupFlows[event.Sender].ReactableEvents, resp.EventID)
 	} else if reactionEventContent.RelatesTo.Key == RED_X {
 		if currentFlow.State == Confirm {
 			currentFlow = BlankStandupFlow()

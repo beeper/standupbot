@@ -238,6 +238,8 @@ func main() {
 
 	syncer.OnEventType(mevent.EventMessage, func(source mautrix.EventSource, event *mevent.Event) { go HandleMessage(source, event) })
 
+	syncer.OnEventType(mevent.EventRedaction, func(source mautrix.EventSource, event *mevent.Event) { go HandleRedaction(source, event) })
+
 	syncer.OnEventType(mevent.EventEncrypted, func(source mautrix.EventSource, event *mevent.Event) {
 		decryptedEvent, err := olmMachine.DecryptMegolmEvent(event)
 		if err != nil {
@@ -248,6 +250,8 @@ func main() {
 				go HandleMessage(source, decryptedEvent)
 			} else if decryptedEvent.Type == mevent.EventReaction {
 				go HandleReaction(source, decryptedEvent)
+			} else if decryptedEvent.Type == mevent.EventRedaction {
+				go HandleRedaction(source, decryptedEvent)
 			}
 		}
 	})

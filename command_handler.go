@@ -36,6 +36,7 @@ type StandupItem struct {
 type StandupFlow struct {
 	State           StandupFlowState
 	ReactableEvents []mid.EventID
+	PreviewEventId  mid.EventID
 	Yesterday       []StandupItem
 	Friday          []StandupItem
 	Weekend         []StandupItem
@@ -80,7 +81,7 @@ func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *m
 				return nil, err
 			}
 
-			encrypted.RelatesTo = content.RelatesTo
+			encrypted.RelatesTo = content.RelatesTo // The m.relates_to field should be unencrypted, so copy it.
 			return client.SendMessageEvent(roomId, mevent.EventEncrypted, encrypted)
 		} else {
 			log.Debugf("Sending event to %s unencrypted: %+v", roomId, content)
@@ -112,6 +113,7 @@ func SendHelp(roomId mid.RoomID) {
 	noticeText := `COMMANDS:
 * new -- prepare a new standup post
 * show -- show the current standup post
+* edit [Friday|Weekend|Yesterday|Today|Blockers|Notes] -- edit the given section of the standup post
 * cancel -- cancel the current standup post
 * help -- show this help
 * vanquish -- tell the bot to leave the room
@@ -122,6 +124,7 @@ func SendHelp(roomId mid.RoomID) {
 <ul>
 <li><b>new</b> &mdash; prepare a new standup post</li>
 <li><b>show</b> &mdash; show the current standup post</li>
+<li><b>edit [Friday|Weekend|Yesterday|Today|Blockers|Notes]</b> &mdash; edit the given section of the standup post</li>
 <li><b>cancel</b> &mdash; cancel the current standup post</li>
 <li><b>help</b> &mdash; show this help</li>
 <li><b>vanquish</b> &mdash; tell the bot to leave the room</li>
@@ -283,6 +286,22 @@ func HandleRoom(roomID mid.RoomID, sender mid.UserID, params []string) {
 	SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 }
 
+func EditPreview(roomID mid.RoomID, userID mid.UserID, flow *StandupFlow) []mid.EventID {
+	newPost := FormatPost(userID, flow, true, true)
+	resp, _ := SendMessage(roomID, mevent.MessageEventContent{
+		MsgType:       mevent.MsgText,
+		Body:          " * " + newPost.Body,
+		Format:        mevent.FormatHTML,
+		FormattedBody: " * " + newPost.FormattedBody,
+		RelatesTo: &mevent.RelatesTo{
+			Type:    mevent.RelReplace,
+			EventID: flow.PreviewEventId,
+		},
+		NewContent: &newPost,
+	})
+	return append(flow.ReactableEvents, resp.EventID)
+}
+
 func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	userId := mid.UserID(configuration.Username)
 	localpart, _, _ := userId.ParseAndDecode()
@@ -307,8 +326,6 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			// the set of reactable messages, then
 			relatesTo := messageEventContent.RelatesTo
 			if relatesTo != nil && relatesTo.Type == mevent.RelReplace {
-				log.Print(relatesTo, relatesTo.Type, relatesTo.EventID)
-				log.Print(val.Yesterday)
 				for i, item := range val.Yesterday {
 					if item.EventID == relatesTo.EventID {
 						val.Yesterday[i].EventID = item.EventID
@@ -359,26 +376,7 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 				}
 
 				if val.State == Confirm {
-					// There should only be a single event
-					// ID that is reactable, and that event
-					// ID should be the standup post
-					// preview. Thus, edit it with the most
-					// recent updates to val.
-					currentPreviewEventId := val.ReactableEvents[len(val.ReactableEvents)-1]
-
-					newPost := FormatPost(event.Sender, val, true, true)
-					resp, _ := SendMessage(event.RoomID, mevent.MessageEventContent{
-						MsgType:       mevent.MsgText,
-						Body:          " * " + newPost.Body,
-						Format:        mevent.FormatHTML,
-						FormattedBody: " * " + newPost.FormattedBody,
-						RelatesTo: &mevent.RelatesTo{
-							Type:    mevent.RelReplace,
-							EventID: currentPreviewEventId,
-						},
-						NewContent: &newPost,
-					})
-					val.ReactableEvents = append(currentStandupFlows[event.Sender].ReactableEvents, resp.EventID)
+					val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
 				}
 
 				return
@@ -455,6 +453,47 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "No standup post to show."})
 		}
 		break
+	case "edit":
+		if len(commandParts) > 2 {
+			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Incorrect number of parameters."})
+		}
+		if currentFlow, found := currentStandupFlows[event.Sender]; !found || currentFlow.State == FlowNotStarted {
+			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to edit."})
+		}
+
+		switch strings.ToLower(commandParts[1]) {
+		case "friday":
+			if stateStore.GetCurrentWeekdayInUserTimezone(event.Sender) != time.Monday {
+				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's not Monday, so you can't go back to edit Friday."})
+				return
+			}
+			GoToStateAndNotify(event.RoomID, event.Sender, Friday)
+			break
+		case "weekend":
+			if stateStore.GetCurrentWeekdayInUserTimezone(event.Sender) != time.Monday {
+				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's not Monday, so you can't go back to edit the weekend."})
+				return
+			}
+			GoToStateAndNotify(event.RoomID, event.Sender, Weekend)
+			break
+		case "yesterday":
+			GoToStateAndNotify(event.RoomID, event.Sender, Yesterday)
+			break
+		case "today":
+			GoToStateAndNotify(event.RoomID, event.Sender, Today)
+			break
+		case "blockers":
+			GoToStateAndNotify(event.RoomID, event.Sender, Blockers)
+			break
+		case "notes":
+			GoToStateAndNotify(event.RoomID, event.Sender, Notes)
+			break
+		default:
+			SendMessage(event.RoomID, mevent.MessageEventContent{
+				MsgType: mevent.MsgNotice,
+				Body:    fmt.Sprintf("Invalid item to edit! Must be one of Friday, Weekend, Yesterday, Today, Blockers, or Notes"),
+			})
+		}
 	case "cancel":
 		if val, found := currentStandupFlows[event.Sender]; !found || val.State == FlowNotStarted {
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to cancel."})
@@ -469,5 +508,51 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	default:
 		SendHelp(event.RoomID)
 		break
+	}
+}
+
+func HandleRedaction(_ mautrix.EventSource, event *mevent.Event) {
+	// Handle redactions
+	if val, found := currentStandupFlows[event.Sender]; found {
+		for i, item := range val.Yesterday {
+			if item.EventID == event.Redacts {
+				val.Yesterday = append(val.Yesterday[:i], val.Yesterday[i+1:]...)
+				break
+			}
+		}
+		for i, item := range val.Friday {
+			if item.EventID == event.Redacts {
+				val.Friday = append(val.Friday[:i], val.Friday[i+1:]...)
+				break
+			}
+		}
+		for i, item := range val.Weekend {
+			if item.EventID == event.Redacts {
+				val.Weekend = append(val.Weekend[:i], val.Weekend[i+1:]...)
+				break
+			}
+		}
+		for i, item := range val.Today {
+			if item.EventID == event.Redacts {
+				val.Today = append(val.Today[:i], val.Today[i+1:]...)
+				break
+			}
+		}
+		for i, item := range val.Blockers {
+			if item.EventID == event.Redacts {
+				val.Blockers = append(val.Blockers[:i], val.Blockers[i+1:]...)
+				break
+			}
+		}
+		for i, item := range val.Notes {
+			if item.EventID == event.Redacts {
+				val.Notes = append(val.Notes[:i], val.Notes[i+1:]...)
+				break
+			}
+		}
+
+		if val.PreviewEventId.String() != "" {
+			val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
+		}
 	}
 }
