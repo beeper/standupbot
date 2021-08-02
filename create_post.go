@@ -135,11 +135,11 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendC
 	}
 
 	if preview {
-		postText = fmt.Sprintf("Standup post preview:\n\n" + postText)
-		postHtml = fmt.Sprintf("<i>Standup post preview:</i><br><br>" + postHtml)
+		postText = fmt.Sprintf("Standup post preview:\n----------------------------------------\n" + postText)
+		postHtml = fmt.Sprintf("<i>Standup post preview:</i><hr>" + postHtml)
 	}
 	if sendConfirmation {
-		postText = fmt.Sprintf("%s\n\n---\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
+		postText = fmt.Sprintf("%s\n----------------------------------------\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
 		postHtml = fmt.Sprintf("%s<hr><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
 	}
 
