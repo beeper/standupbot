@@ -1,3 +1,9 @@
+# v0.2.1
+
+* Fixed bug where sending `!su` would make the bot crash.
+* Added a CI pipeline for building and testing the application on every push.
+* Made the basic compilation tests pass.
+
 # v0.2.0
 
 * Enabled editing of the standup post via edits and redactions to the individual
