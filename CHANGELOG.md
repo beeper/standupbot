@@ -1,3 +1,14 @@
+# v0.2.0
+
+* Enabled editing of the standup post via edits and redactions to the individual
+  messages.
+* Added `!su edit` command which takes the user back to the corresponding
+  section of the standup post so they can add items to the post.
+* Added version and source code link to `!su help`.
+* Added some documentation to the README.
+* Refuse to send a standup message to a room which the user is not a member of.
+  This prevents potential spam if someone gets a hold of a room ID.
+
 # v0.1.5
 
 * Bug fix: start with blank standup post on notify

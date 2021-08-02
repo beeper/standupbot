@@ -54,9 +54,9 @@ func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowS
 
 	resp, err := sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
 		MsgType:       mevent.MsgText,
-		Body:          fmt.Sprintf("%s Enter one item per-line. React with ✅ when done.", question),
+		Body:          fmt.Sprintf("%s Enter one item message. React with ✅ when done.", question),
 		Format:        mevent.FormatHTML,
-		FormattedBody: fmt.Sprintf("%s <i>Enter one item per-line. React with ✅ when done.</i>", question),
+		FormattedBody: fmt.Sprintf("%s <i>Enter one item message. React with ✅ when done.</i>", question),
 	})
 	if err != nil {
 		log.Errorf("Failed to send notice asking '%s'!", question)

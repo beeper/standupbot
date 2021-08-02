@@ -21,6 +21,9 @@ state events in the room.
 * `!su help` for help
 * `!su new` starts a new standup post. If you configure the bot to notify you
   each morning, then you won't normally need to do this.
+* To edit your post, you can just edit or redact the individual messages.
+* You can also use `!su edit [Friday|Weekend|Yesterday|Today|Blockers|Notes]` to
+  go back and add items to the corresponding section of the standup post.
 
 You will need to also set a standup post send room. This is the room which the
 bot will send standup posts to. You can configure it using
