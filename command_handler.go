@@ -437,7 +437,9 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		}
 	}
 
-	if len(commandParts) == 1 && commandParts[0] == "" {
+	if len(commandParts) == 0 {
+		commandParts = append(commandParts, "help")
+	} else if len(commandParts) == 1 && commandParts[0] == "" {
 		commandParts[0] = "help"
 	}
 
