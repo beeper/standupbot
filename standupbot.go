@@ -214,7 +214,7 @@ func main() {
 				return client.JoinRoomByID(event.RoomID)
 			})
 			if err != nil {
-				log.Error("Could not join channel %s. Error %s", event.RoomID.String(), err)
+				log.Errorf("Could not join channel %s. Error %+v", event.RoomID.String(), err)
 			} else {
 				log.Infof("Joined %s sucessfully", event.RoomID.String())
 			}

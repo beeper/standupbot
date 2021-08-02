@@ -23,7 +23,7 @@ func DoRetry(description string, fn func() (interface{}, error)) (interface{}, e
 			return val, nil
 		}
 		nextDuration, stop := b.Next()
-		log.Debugf("  %s failed. Retrying in %d seconds...", description, nextDuration.Seconds())
+		log.Debugf("  %s failed. Retrying in %f seconds...", description, nextDuration.Seconds())
 		if stop {
 			log.Debugf("  %s failed. Retry limit reached. Will not retry.", description)
 			err = errors.New("%s failed. Retry limit reached. Will not retry.")
