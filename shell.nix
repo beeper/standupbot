@@ -1,11 +1,14 @@
-{ pkgs ? import <nixpkgs> { } }:
-
-pkgs.mkShell {
-  buildInputs = with pkgs; [
-    go
-    goimports
-    gopls
-    olm
-    vgo2nix
-  ];
-}
+{ forCI ? false }: let
+  pkgs = import <nixpkgs> {};
+in
+  with pkgs;
+  mkShell {
+    buildInputs = [
+      go
+      olm
+    ] ++ lib.lists.optional (!forCI) [
+      goimports
+      gopls
+      vgo2nix
+    ];
+  }
