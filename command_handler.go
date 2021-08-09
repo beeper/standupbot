@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"maunium.net/go/mautrix"
 	mcrypto "maunium.net/go/mautrix/crypto"
@@ -25,6 +26,7 @@ const (
 	Blockers
 	Notes
 	Confirm
+	Sent
 )
 
 type StandupItem struct {
@@ -34,6 +36,7 @@ type StandupItem struct {
 }
 
 type StandupFlow struct {
+	FlowID          uuid.UUID
 	State           StandupFlowState
 	ReactableEvents []mid.EventID
 	PreviewEventId  mid.EventID
@@ -48,7 +51,9 @@ type StandupFlow struct {
 var currentStandupFlows map[mid.UserID]*StandupFlow = make(map[mid.UserID]*StandupFlow)
 
 func BlankStandupFlow() *StandupFlow {
+	uuid, _ := uuid.NewUUID()
 	return &StandupFlow{
+		FlowID:          uuid,
 		State:           FlowNotStarted,
 		ReactableEvents: make([]mid.EventID, 0),
 		Yesterday:       make([]StandupItem, 0),
@@ -291,7 +296,7 @@ func HandleRoom(roomID mid.RoomID, sender mid.UserID, params []string) {
 }
 
 func EditPreview(roomID mid.RoomID, userID mid.UserID, flow *StandupFlow) []mid.EventID {
-	newPost := FormatPost(userID, flow, true, true)
+	newPost := FormatPost(userID, flow, true, true, false)
 	resp, _ := SendMessage(roomID, mevent.MessageEventContent{
 		MsgType:       mevent.MsgText,
 		Body:          " * " + newPost.Body,
@@ -381,6 +386,9 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 
 				if val.State == Confirm {
 					val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
+				} else if val.State == Sent {
+					client.RedactEvent(event.RoomID, val.PreviewEventId)
+					ShowMessagePreview(event, val, true)
 				}
 
 				return
@@ -461,7 +469,7 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		break
 	case "show":
 		if currentFlow, found := currentStandupFlows[event.Sender]; found && currentFlow.State != FlowNotStarted {
-			SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, false))
+			SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, false, false))
 		} else {
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "No standup post to show."})
 		}

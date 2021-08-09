@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"maunium.net/go/mautrix"
 	mevent "maunium.net/go/mautrix/event"
@@ -14,10 +15,14 @@ import (
 const CHECKMARK = "✅"
 const RED_X = "❌"
 
-var PreviousStandup = mevent.Type{"com.nevarro.standupbot.previous_standup", mevent.StateEventType}
+// Previous Post
+var StatePreviousPost = mevent.Type{"com.nevarro.standupbot.previous_post", mevent.StateEventType}
 
-type PreviousStandupEventContent struct {
-	TzString string
+type PreviousPostEventContent struct {
+	EditEventID mid.EventID
+	FlowID      uuid.UUID
+	Day         time.Weekday
+	TodayItems  []StandupItem
 }
 
 func sendMessageWithCheckmarkReaction(roomID mid.RoomID, message mevent.MessageEventContent) (*mautrix.RespSendEvent, error) {
@@ -71,10 +76,12 @@ func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowS
 
 func CreatePost(roomID mid.RoomID, userID mid.UserID) {
 	stateKey := strings.TrimPrefix(userID.String(), "@")
-	var previousStandupEventContent PreviousStandupEventContent
-	err := client.StateEvent(roomID, PreviousStandup, stateKey, &previousStandupEventContent)
+	var previousPostEventContent PreviousPostEventContent
+	err := client.StateEvent(roomID, StatePreviousPost, stateKey, &previousPostEventContent)
 	if err != nil {
-		log.Debug("Couldn't find previous standup info.")
+		log.Debug("Couldn't find previous post info.")
+	} else {
+		log.Debug("Found previous post info ", previousPostEventContent)
 	}
 
 	nextState := Yesterday
@@ -99,7 +106,7 @@ func formatList(items []StandupItem) (string, string) {
 	return strings.Join(plain, "\n"), strings.Join(html, "")
 }
 
-func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendConfirmation bool) mevent.MessageEventContent {
+func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendConfirmation bool, isEditOfExisting bool) mevent.MessageEventContent {
 	postText := fmt.Sprintf(`%s's standup post:\n\n`, userID)
 	postHtml := fmt.Sprintf(`<a href="https://matrix.to/#/%s">%s</a>'s standup post:<br><br>`, userID, userID)
 
@@ -139,8 +146,13 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendC
 		postHtml = fmt.Sprintf("<i>Standup post preview:</i><hr>" + postHtml)
 	}
 	if sendConfirmation {
-		postText = fmt.Sprintf("%s\n----------------------------------------\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
-		postHtml = fmt.Sprintf("%s<hr><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
+		if isEditOfExisting {
+			postText = fmt.Sprintf("%s\n----------------------------------------\nSend Edit (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
+			postHtml = fmt.Sprintf("%s<hr><b>Send Edit (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
+		} else {
+			postText = fmt.Sprintf("%s\n----------------------------------------\nSend (%s) or Cancel (%s)?", postText, CHECKMARK, RED_X)
+			postHtml = fmt.Sprintf("%s<hr><b>Send (%s) or Cancel (%s)?</b>", postHtml, CHECKMARK, RED_X)
+		}
 	}
 
 	return mevent.MessageEventContent{
@@ -148,6 +160,89 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendC
 		Body:          postText,
 		Format:        mevent.FormatHTML,
 		FormattedBody: postHtml,
+	}
+}
+
+func ShowMessagePreview(event *mevent.Event, currentFlow *StandupFlow, isEditOfExisting bool) {
+	resp, err := SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, true, isEditOfExisting))
+	if err == nil {
+		SendReaction(event.RoomID, resp.EventID, CHECKMARK)
+		SendReaction(event.RoomID, resp.EventID, RED_X)
+	}
+	currentFlow.PreviewEventId = resp.EventID
+	currentStandupFlows[event.Sender].ReactableEvents = append(currentStandupFlows[event.Sender].ReactableEvents, resp.EventID)
+}
+
+func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEventID *mid.EventID) {
+	sendRoomID := stateStore.GetSendRoomId(event.Sender)
+	if sendRoomID.String() == "" {
+		SendMessage(event.RoomID, mevent.MessageEventContent{
+			MsgType:       mevent.MsgText,
+			Body:          "No send room set! Set one using `!standupbot room [room ID or alias]`",
+			Format:        mevent.FormatHTML,
+			FormattedBody: "No send room set! Set one using <code>!standupbot room [room ID or alias]</code>",
+		})
+		return
+	}
+
+	found := false
+	for _, userID := range stateStore.GetRoomMembers(sendRoomID) {
+		if event.Sender == userID {
+			found = true
+		}
+	}
+	if !found {
+		SendMessage(event.RoomID, mevent.MessageEventContent{
+			MsgType:       mevent.MsgText,
+			Body:          "You are not a member of the configured send room! Refusing to send a message to the room. Set a new one using `!standupbot room [room ID or alias]`.",
+			Format:        mevent.FormatHTML,
+			FormattedBody: "<b>You are not a member of the configured send room!</b> Refusing to send a message to the room. Set a new one using <code>!standupbot room [room ID or alias]</code>.",
+		})
+		return
+	}
+
+	newPost := FormatPost(event.Sender, currentFlow, false, false, false)
+	var futureEditId mid.EventID
+	var err error
+	editStr := ""
+	if editEventID != nil {
+		_, err = SendMessage(sendRoomID, mevent.MessageEventContent{
+			MsgType:       mevent.MsgText,
+			Body:          " * " + newPost.Body,
+			Format:        mevent.FormatHTML,
+			FormattedBody: " * " + newPost.FormattedBody,
+			RelatesTo: &mevent.RelatesTo{
+				Type:    mevent.RelReplace,
+				EventID: *editEventID,
+			},
+			NewContent: &newPost,
+		})
+		editStr = " edit"
+		futureEditId = *editEventID
+	} else {
+		var sent *mautrix.RespSendEvent
+		sent, err = SendMessage(sendRoomID, newPost)
+		futureEditId = sent.EventID
+	}
+
+	if err != nil {
+		SendMessage(event.RoomID, mevent.MessageEventContent{
+			MsgType: mevent.MsgText,
+			Body:    "Failed to send standup post" + editStr + " to " + sendRoomID.String(),
+		})
+	} else {
+		SendMessage(event.RoomID, mevent.MessageEventContent{
+			MsgType: mevent.MsgText,
+			Body:    "Sent standup post" + editStr + " to " + sendRoomID.String(),
+		})
+		currentFlow.State = Sent
+		stateKey := strings.TrimPrefix(event.Sender.String(), "@")
+		_, err = client.SendStateEvent(event.RoomID, StatePreviousPost, stateKey, PreviousPostEventContent{
+			EditEventID: futureEditId,
+			FlowID:      currentFlow.FlowID,
+			Day:         stateStore.GetCurrentWeekdayInUserTimezone(event.Sender),
+			TodayItems:  currentFlow.Today,
+		})
 	}
 }
 
@@ -172,7 +267,19 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 	if reactionEventContent.RelatesTo.Key == CHECKMARK {
 		currentFlow.ReactableEvents = make([]mid.EventID, 0)
 
-		if currentFlow.PreviewEventId.String() != "" && currentFlow.State != Confirm {
+		stateKey := strings.TrimPrefix(event.Sender.String(), "@")
+		var previousPostEventContent PreviousPostEventContent
+		stateEventErr := client.StateEvent(event.RoomID, StatePreviousPost, stateKey, &previousPostEventContent)
+
+		if stateEventErr == nil && currentFlow.FlowID == previousPostEventContent.FlowID {
+			if currentFlow.State != Sent {
+				// this means that we have already gone through the flow, sent the message, then went back to edit.
+				client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
+				ShowMessagePreview(event, currentFlow, false)
+				currentFlow.State = Sent
+				return
+			}
+		} else if currentFlow.PreviewEventId.String() != "" && currentFlow.State != Confirm && currentFlow.State != Sent {
 			// this means we have already gone through the flow, and we went back to edit.
 			client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
 			currentFlow.State = Notes
@@ -195,55 +302,26 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 			GoToStateAndNotify(event.RoomID, event.Sender, Notes)
 			break
 		case Notes:
-			resp, err := SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, true))
-			if err == nil {
-				SendReaction(event.RoomID, resp.EventID, CHECKMARK)
-				SendReaction(event.RoomID, resp.EventID, RED_X)
-			}
+			ShowMessagePreview(event, currentFlow, false)
 			currentFlow.State = Confirm
-			currentFlow.PreviewEventId = resp.EventID
-			currentStandupFlows[event.Sender].ReactableEvents =
-				append(currentStandupFlows[event.Sender].ReactableEvents, resp.EventID)
 			return
 		case Confirm:
-			sendRoomID := stateStore.GetSendRoomId(event.Sender)
-			if sendRoomID.String() == "" {
+			SendMessageToSendRoom(event, currentFlow, nil)
+			return
+		case Sent:
+			if stateEventErr != nil {
 				SendMessage(event.RoomID, mevent.MessageEventContent{
-					MsgType:       mevent.MsgText,
-					Body:          "No send room set! Set one using `!standupbot room [room ID or alias]`",
-					Format:        mevent.FormatHTML,
-					FormattedBody: "No send room set! Set one using <code>!standupbot room [room ID or alias]</code>",
+					MsgType: mevent.MsgText,
+					Body:    "No previous post info found!",
 				})
+				currentFlow = BlankStandupFlow()
 				return
 			}
-
-			found := false
-			for _, userID := range stateStore.GetRoomMembers(sendRoomID) {
-				if event.Sender == userID {
-					found = true
-				}
-			}
-			if !found {
-				SendMessage(event.RoomID, mevent.MessageEventContent{
-					MsgType:       mevent.MsgText,
-					Body:          "You are not a member of the configured send room! Refusing to send a message to the room. Set a new one using `!standupbot room [room ID or alias]`.",
-					Format:        mevent.FormatHTML,
-					FormattedBody: "<b>You are not a member of the configured send room!</b> Refusing to send a message to the room. Set a new one using <code>!standupbot room [room ID or alias]</code>.",
-				})
-				return
-			}
-
-			_, err := SendMessage(sendRoomID, FormatPost(event.Sender, currentFlow, false, false))
-			if err != nil {
-				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "Failed to send standup post to " + sendRoomID.String()})
-			} else {
-				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "Sent standup post to " + sendRoomID.String()})
-				currentFlow.State = FlowNotStarted
-			}
+			SendMessageToSendRoom(event, currentFlow, &previousPostEventContent.EditEventID)
 			return
 		}
 	} else if reactionEventContent.RelatesTo.Key == RED_X {
-		if currentFlow.State == Confirm {
+		if currentFlow.State == Confirm || currentFlow.State == Sent {
 			currentFlow = BlankStandupFlow()
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "Standup post cancelled"})
 		}
