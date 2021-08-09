@@ -1,3 +1,7 @@
+# v0.2.3
+
+* Fixed bug where typing `!su edit` would crash the bot.
+
 # v0.2.2
 
 * Added ability to edit your standup post after posting it to the send room.
