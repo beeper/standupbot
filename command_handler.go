@@ -475,8 +475,12 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		}
 		break
 	case "edit":
-		if len(commandParts) > 2 {
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Incorrect number of parameters."})
+		if len(commandParts) != 2 {
+			SendMessage(event.RoomID, mevent.MessageEventContent{
+				MsgType: mevent.MsgNotice,
+				Body:    fmt.Sprintf("Invalid item to edit! Must be one of Friday, Weekend, Yesterday, Today, Blockers, or Notes"),
+			})
+			return
 		}
 		if currentFlow, found := currentStandupFlows[event.Sender]; !found || currentFlow.State == FlowNotStarted {
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to edit."})
@@ -509,12 +513,8 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		case "notes":
 			GoToStateAndNotify(event.RoomID, event.Sender, Notes)
 			break
-		default:
-			SendMessage(event.RoomID, mevent.MessageEventContent{
-				MsgType: mevent.MsgNotice,
-				Body:    fmt.Sprintf("Invalid item to edit! Must be one of Friday, Weekend, Yesterday, Today, Blockers, or Notes"),
-			})
 		}
+		break
 	case "cancel":
 		if val, found := currentStandupFlows[event.Sender]; !found || val.State == FlowNotStarted {
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to cancel."})
