@@ -1,3 +1,10 @@
+# v0.2.4
+
+* Fixed detection of whether to start a new flow when the notification time for
+  the user comes up.
+* Fixed typo in standup flow.
+* Prevent editing to "yesterday" when it's Monday.
+
 # v0.2.3
 
 * Fixed bug where typing `!su edit` would crash the bot.
