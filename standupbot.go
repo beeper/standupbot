@@ -69,6 +69,26 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not open standupbot database.")
 	}
+
+	// Make sure to exit cleanly
+	c := make(chan os.Signal, 1)
+	signal.Notify(c,
+		os.Interrupt,
+		os.Kill,
+		syscall.SIGABRT,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+		syscall.SIGTERM,
+	)
+	go func() {
+		for range c { // when the process is killed
+			log.Info("Cleaning up")
+			db.Close()
+			os.Exit(0)
+		}
+	}()
+
 	stateStore = store.NewStateStore(db)
 	if err := stateStore.CreateTables(); err != nil {
 		log.Fatal("Failed to create the tables for standupbot.", err)
@@ -156,25 +176,6 @@ func main() {
 			}
 		}
 	}
-
-	// Make sure to exit cleanly
-	c := make(chan os.Signal, 1)
-	signal.Notify(c,
-		os.Interrupt,
-		os.Kill,
-		syscall.SIGABRT,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGQUIT,
-		syscall.SIGTERM,
-	)
-	go func() {
-		for range c { // when the process is killed
-			log.Info("Cleaning up")
-			db.Close()
-			os.Exit(0)
-		}
-	}()
 
 	// Setup the crypto store
 	sqlCryptoStore := mcrypto.NewSQLCryptoStore(
