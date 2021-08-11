@@ -269,7 +269,7 @@ func main() {
 
 			for userID, roomID := range usersForCurrentMinute {
 				log.Infof("Notifying %s", userID)
-				if currentFlow, found := currentStandupFlows[userID]; !found || currentFlow.State == FlowNotStarted {
+				if currentFlow, found := currentStandupFlows[userID]; !found || currentFlow.State == FlowNotStarted || currentFlow.State == Sent {
 					SendMessage(roomID, mevent.MessageEventContent{
 						MsgType: mevent.MsgText,
 						Body:    "Time to write your standup post!",
