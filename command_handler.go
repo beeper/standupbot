@@ -502,6 +502,10 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			GoToStateAndNotify(event.RoomID, event.Sender, Weekend)
 			break
 		case "yesterday":
+			if stateStore.GetCurrentWeekdayInUserTimezone(event.Sender) == time.Monday {
+				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's Monday, so you can't go back to edit yesterday. Edit Friday or Weekend instead."})
+				return
+			}
 			GoToStateAndNotify(event.RoomID, event.Sender, Yesterday)
 			break
 		case "today":
