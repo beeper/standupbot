@@ -70,6 +70,16 @@ func main() {
 		log.Fatal("Could not open standupbot database.")
 	}
 
+	currentStandupFlowsJson, err := os.ReadFile(xdg.DataHome() + "/standupbot/current-flows.json")
+	if err != nil {
+		log.Warn("Couldn't open the current-flows JSON.")
+	} else {
+		err = json.Unmarshal(currentStandupFlowsJson, &currentStandupFlows)
+		if err != nil {
+			log.Warn("Failed to unmarshal the current flows JSON")
+		}
+	}
+
 	// Make sure to exit cleanly
 	c := make(chan os.Signal, 1)
 	signal.Notify(c,
@@ -85,6 +95,21 @@ func main() {
 		for range c { // when the process is killed
 			log.Info("Cleaning up")
 			db.Close()
+			bytes, err := json.Marshal(currentStandupFlows)
+			if err != nil {
+				log.Error("Failed to serialize current standup flows!")
+			} else {
+				currentStandupFlowsFile, err := os.OpenFile(xdg.DataHome()+"/standupbot/current-flows.json", os.O_CREATE|os.O_WRONLY, 0600)
+				if err != nil {
+					log.Error("Failed to open current standup flows JSON file!")
+				} else {
+					_, err = currentStandupFlowsFile.Write(bytes)
+					if err != nil {
+						log.Error("Failed to write current standup flows JSON to file!")
+					}
+				}
+				currentStandupFlowsFile.Close()
+			}
 			os.Exit(0)
 		}
 	}()
