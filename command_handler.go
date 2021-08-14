@@ -252,8 +252,8 @@ type SendRoomEventContent struct {
 	SendRoomID mid.RoomID
 }
 
-func HandleRoom(roomID mid.RoomID, sender mid.UserID, params []string) {
-	stateKey := strings.TrimPrefix(sender.String(), "@")
+func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
+	stateKey := strings.TrimPrefix(event.Sender.String(), "@")
 	if len(params) == 0 {
 		var sendRoomEventContent SendRoomEventContent
 		err := client.StateEvent(roomID, StateSendRoom, stateKey, &sendRoomEventContent)
@@ -290,11 +290,16 @@ func HandleRoom(roomID mid.RoomID, sender mid.UserID, params []string) {
 		if err != nil {
 			noticeText = fmt.Sprintf("Failed setting send room: %s\nCheck to make sure that standupbot is a mod/admin in the room!", err)
 		} else {
-			stateStore.SetSendRoomId(sender, sendRoomID)
+			stateStore.SetSendRoomId(event.Sender, sendRoomID)
 		}
 	}
 
 	SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+
+	if currentFlow, found := currentStandupFlows[event.Sender]; found && currentFlow.State == Confirm {
+		client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
+		ShowMessagePreview(event, currentFlow, false)
+	}
 }
 
 func EditPreview(roomID mid.RoomID, userID mid.UserID, flow *StandupFlow) []mid.EventID {
@@ -554,7 +559,7 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		}
 		break
 	case "room":
-		HandleRoom(event.RoomID, event.Sender, commandParts[1:])
+		HandleRoom(event.RoomID, event, commandParts[1:])
 		break
 	default:
 		SendHelp(event.RoomID)
