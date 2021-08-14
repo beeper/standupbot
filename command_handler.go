@@ -120,6 +120,7 @@ func SendHelp(roomId mid.RoomID) {
 * show -- show the current standup post
 * edit [Friday|Weekend|Yesterday|Today|Blockers|Notes] -- edit the given section of the standup post
 * cancel -- cancel the current standup post
+* undo -- undo sending the current standup post to the send room
 * help -- show this help
 * vanquish -- tell the bot to leave the room
 * tz [timezone] -- show or set the timezone to use for configuring notifications
@@ -133,6 +134,7 @@ Version %s. Source code: https://sr.ht/~sumner/standupbot/`
 <li><b>show</b> &mdash; show the current standup post</li>
 <li><b>edit [Friday|Weekend|Yesterday|Today|Blockers|Notes]</b> &mdash; edit the given section of the standup post</li>
 <li><b>cancel</b> &mdash; cancel the current standup post</li>
+<li><b>undo</b> &mdash; undo sending the current standup post to the send room</li>
 <li><b>help</b> &mdash; show this help</li>
 <li><b>vanquish</b> &mdash; tell the bot to leave the room</li>
 <li><b>tz [timezone]</b> &mdash; show or set the timezone to use for configuring notifications</li>
@@ -517,6 +519,30 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		case "notes":
 			GoToStateAndNotify(event.RoomID, event.Sender, Notes)
 			break
+		}
+		break
+	case "undo":
+		if val, found := currentStandupFlows[event.Sender]; !found || val.State != Sent {
+			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No sent standup post to undo."})
+		} else {
+			sendRoomID := stateStore.GetSendRoomId(event.Sender)
+			stateKey := strings.TrimPrefix(event.Sender.String(), "@")
+			var previousPostEventContent PreviousPostEventContent
+			err := client.StateEvent(event.RoomID, StatePreviousPost, stateKey, &previousPostEventContent)
+			if err != nil {
+				log.Debug("Couldn't find previous post info.")
+				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No previous standup post to undo."})
+			}
+			_, err = client.RedactEvent(sendRoomID, previousPostEventContent.EditEventID)
+			if err != nil {
+				SendMessage(event.RoomID, mevent.MessageEventContent{Body: "Failed to redact the standup post!"})
+			} else {
+				SendMessage(event.RoomID, mevent.MessageEventContent{
+					Body: fmt.Sprintf("Redacted standup post with ID: %s in %s", previousPostEventContent.EditEventID, event.RoomID),
+				})
+				currentStandupFlows[event.Sender].State = Confirm
+				client.SendStateEvent(event.RoomID, StatePreviousPost, stateKey, struct{}{})
+			}
 		}
 		break
 	case "cancel":
