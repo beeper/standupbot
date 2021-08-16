@@ -1,3 +1,8 @@
+# v0.2.5
+
+* Add `!su undo` command for undoing sending to the standup room.
+* Persisted current standup flows across bot restarts.
+
 # v0.2.4
 
 * Fixed detection of whether to start a new flow when the notification time for
