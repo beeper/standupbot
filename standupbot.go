@@ -273,7 +273,7 @@ func main() {
 		if err != nil {
 			log.Warn("Failed to decrypt: ", err)
 		} else {
-			log.Debug("Received encrypted event: ", decryptedEvent.Content.Raw)
+			log.Debug("Received encrypted event")
 			if decryptedEvent.Type == mevent.EventMessage {
 				go HandleMessage(source, decryptedEvent)
 			} else if decryptedEvent.Type == mevent.EventReaction {

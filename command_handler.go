@@ -68,7 +68,7 @@ func BlankStandupFlow() *StandupFlow {
 func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *mautrix.RespSendEvent, err error) {
 	r, err := DoRetry("send message to "+roomId.String(), func() (interface{}, error) {
 		if stateStore.IsEncrypted(roomId) {
-			log.Debugf("Sending event to %s encrypted: %+v", roomId, content)
+			log.Debugf("Sending encrypted event to %s", roomId)
 			encrypted, err := olmMachine.EncryptMegolmEvent(roomId, mevent.EventMessage, content)
 
 			// These three errors mean we have to make a new Megolm session
@@ -89,7 +89,7 @@ func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *m
 			encrypted.RelatesTo = content.RelatesTo // The m.relates_to field should be unencrypted, so copy it.
 			return client.SendMessageEvent(roomId, mevent.EventEncrypted, encrypted)
 		} else {
-			log.Debugf("Sending event to %s unencrypted: %+v", roomId, content)
+			log.Debugf("Sending unencrypted event to %s", roomId)
 			return client.SendMessageEvent(roomId, mevent.EventMessage, content)
 		}
 	})
@@ -328,14 +328,11 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 
 	messageEventContent := event.Content.AsMessage()
 
-	log.Debug("Received message with content: ", messageEventContent.Body)
 	body := messageEventContent.Body
 	body = strings.TrimSpace(body)
 	body = strings.TrimPrefix(body, "!")
 	body = strings.TrimPrefix(body, "@")
 
-	log.Debug("userid: ", localpart)
-	log.Debug(!strings.HasPrefix(body, localpart), !strings.HasPrefix(body, "su"))
 	if !strings.HasPrefix(body, localpart) && !strings.HasPrefix(body, "su") {
 		if val, found := currentStandupFlows[event.Sender]; found {
 			// If this is an edit of one of the messages that is in
