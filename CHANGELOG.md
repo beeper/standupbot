@@ -1,3 +1,8 @@
+# v0.2.6
+
+* Reduced verbosity of event logging.
+* Dependency update: mautrix: v0.9.14 -> v0.9.23.
+
 # v0.2.5
 
 * Add `!su undo` command for undoing sending to the standup room.
