@@ -8,5 +8,5 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/sethvargo/go-retry v0.1.0
 	github.com/sirupsen/logrus v1.8.1
-	maunium.net/go/mautrix v0.9.14
+	maunium.net/go/mautrix v0.9.23
 )
