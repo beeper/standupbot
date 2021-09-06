@@ -1,3 +1,12 @@
+# v0.2.7
+
+* Improved detection of standupbot command messages.
+  ([#18](https://todo.sr.ht/~sumner/standupbot/18))
+* Added logic to ignore non-command messages if not in config room.
+  ([#16](4https://todo.sr.ht/~sumner/standupbot/16))
+* Fixed a bug when using the ❌ emoji to cancel a standup post.
+* Fixed a couple of bugs with how the config rooms were being set.
+
 # v0.2.6
 
 * Reduced verbosity of event logging.
