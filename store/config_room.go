@@ -48,6 +48,15 @@ func (store *StateStore) RemoveConfigRoom(roomID mid.RoomID) {
 	tx.Commit()
 }
 
+func (store *StateStore) GetConfigRoomId(userID mid.UserID) mid.RoomID {
+	row := store.DB.QueryRow("SELECT room_id FROM user_config_room WHERE user_id = ?", userID)
+	var roomID mid.RoomID
+	if err := row.Scan(&roomID); err != nil {
+		return ""
+	}
+	return roomID
+}
+
 // Notification time handling
 
 func (store *StateStore) SetTimezone(userID mid.UserID, timezone string) {

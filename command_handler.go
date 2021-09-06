@@ -385,6 +385,10 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 
 	if err != nil {
 		// This message is not a command.
+		if stateStore.GetConfigRoomId(event.Sender) != event.RoomID {
+			// Ignore non-command messages if not in config room.
+			return
+		}
 
 		if val, found := currentStandupFlows[event.Sender]; found {
 			relatesTo := messageEventContent.RelatesTo
@@ -448,6 +452,8 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		// This is not a bot command. Return.
 		return
 	}
+
+	stateStore.SetConfigRoom(event.Sender, event.RoomID)
 
 	switch strings.ToLower(commandParts[0]) {
 	case "vanquish":
