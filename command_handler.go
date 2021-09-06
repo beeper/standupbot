@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -318,30 +319,71 @@ func EditPreview(roomID mid.RoomID, userID mid.UserID, flow *StandupFlow) []mid.
 	return append(flow.ReactableEvents, resp.EventID)
 }
 
-func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
+func GetCommandParts(body string) ([]string, error) {
 	userId := mid.UserID(configuration.Username)
 	localpart, _, _ := userId.ParseAndDecode()
 
+	// Valid command strings include:
+	// standupbot: foo
+	// !su foo
+	// !standupbot foo
+	// @standupbot foo
+	// @standupbot: foo
+
+	validCommandRegexes := []*regexp.Regexp{
+		regexp.MustCompile(fmt.Sprintf("^%s:(.*)$", localpart)),
+		regexp.MustCompile(fmt.Sprintf("^@%s:?(.*)$", localpart)),
+		regexp.MustCompile("^!standupbot$"),
+		regexp.MustCompile("^!standupbot:? (.*)$"),
+		regexp.MustCompile("^!su$"),
+		regexp.MustCompile("^!su:? (.*)$"),
+	}
+
+	body = strings.TrimSpace(body)
+
+	isCommand := false
+	commandParts := []string{}
+	for _, commandRe := range validCommandRegexes {
+		match := commandRe.FindStringSubmatch(body)
+		if match != nil {
+			isCommand = true
+			if len(match) > 1 {
+				commandParts = strings.Split(match[1], " ")
+			} else {
+				commandParts = []string{"help"}
+			}
+			break
+		}
+	}
+	if !isCommand {
+		return []string{}, errors.New("Not a command")
+	}
+
+	return commandParts, nil
+}
+
+func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
+	userId := mid.UserID(configuration.Username)
 	if event.Sender == userId {
 		return
 	}
 
 	messageEventContent := event.Content.AsMessage()
 
-	body := messageEventContent.Body
-	body = strings.TrimSpace(body)
-	body = strings.TrimPrefix(body, "!")
-	body = strings.TrimPrefix(body, "@")
+	commandParts, err := GetCommandParts(messageEventContent.Body)
 
-	if !strings.HasPrefix(body, localpart) && !strings.HasPrefix(body, "su") {
+	if err != nil {
+		// This message is not a command.
+
 		if val, found := currentStandupFlows[event.Sender]; found {
+			// TODO try and refactor
 			// If this is an edit of one of the messages that is in
 			// the set of reactable messages, then
 			relatesTo := messageEventContent.RelatesTo
 			if relatesTo != nil && relatesTo.Type == mevent.RelReplace {
 				for i, item := range val.Yesterday {
 					if item.EventID == relatesTo.EventID {
-						val.Yesterday[i].EventID = item.EventID
+						val.Yesterday[i].EventID = item.EventID // TODO unnecessary I think
 						val.Yesterday[i].Body = messageEventContent.NewContent.Body
 						val.Yesterday[i].FormattedBody = messageEventContent.NewContent.FormattedBody
 						break
@@ -432,27 +474,6 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 
 		// This is not a bot command. Return.
 		return
-	}
-
-	stateStore.SetConfigRoom(event.Sender, event.RoomID)
-
-	body = strings.TrimPrefix(body, localpart)
-	body = strings.TrimPrefix(body, "su")
-	body = strings.TrimPrefix(body, ":")
-	body = strings.TrimSpace(body)
-
-	commandPartsRaw := strings.Split(strings.TrimSpace(body), " ")
-	commandParts := make([]string, 0, len(commandPartsRaw))
-	for _, part := range commandPartsRaw {
-		if len(part) > 0 {
-			commandParts = append(commandParts, part)
-		}
-	}
-
-	if len(commandParts) == 0 {
-		commandParts = append(commandParts, "help")
-	} else if len(commandParts) == 1 && commandParts[0] == "" {
-		commandParts[0] = "help"
 	}
 
 	switch strings.ToLower(commandParts[0]) {
