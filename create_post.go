@@ -322,8 +322,8 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 		}
 	} else if reactionEventContent.RelatesTo.Key == RED_X {
 		if currentFlow.State == Confirm || currentFlow.State == Sent {
-			currentFlow = BlankStandupFlow()
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "Standup post cancelled"})
+			currentStandupFlows[event.Sender] = BlankStandupFlow()
+			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Standup post cancelled"})
 		}
 	}
 }
