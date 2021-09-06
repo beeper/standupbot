@@ -319,7 +319,7 @@ func EditPreview(roomID mid.RoomID, userID mid.UserID, flow *StandupFlow) []mid.
 	return append(flow.ReactableEvents, resp.EventID)
 }
 
-func GetCommandParts(body string) ([]string, error) {
+func getCommandParts(body string) ([]string, error) {
 	userId := mid.UserID(configuration.Username)
 	localpart, _, _ := userId.ParseAndDecode()
 
@@ -362,6 +362,17 @@ func GetCommandParts(body string) ([]string, error) {
 	return commandParts, nil
 }
 
+func tryEditListItem(standupList []StandupItem, editEventID mid.EventID, newContent *mevent.MessageEventContent) bool {
+	for i, item := range standupList {
+		if item.EventID == editEventID {
+			standupList[i].Body = newContent.Body
+			standupList[i].FormattedBody = newContent.FormattedBody
+			return true
+		}
+	}
+	return false
+}
+
 func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	userId := mid.UserID(configuration.Username)
 	if event.Sender == userId {
@@ -370,71 +381,33 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 
 	messageEventContent := event.Content.AsMessage()
 
-	commandParts, err := GetCommandParts(messageEventContent.Body)
+	commandParts, err := getCommandParts(messageEventContent.Body)
 
 	if err != nil {
 		// This message is not a command.
 
 		if val, found := currentStandupFlows[event.Sender]; found {
-			// TODO try and refactor
-			// If this is an edit of one of the messages that is in
-			// the set of reactable messages, then
 			relatesTo := messageEventContent.RelatesTo
 			if relatesTo != nil && relatesTo.Type == mevent.RelReplace {
-				for i, item := range val.Yesterday {
-					if item.EventID == relatesTo.EventID {
-						val.Yesterday[i].EventID = item.EventID // TODO unnecessary I think
-						val.Yesterday[i].Body = messageEventContent.NewContent.Body
-						val.Yesterday[i].FormattedBody = messageEventContent.NewContent.FormattedBody
-						break
-					}
-				}
-				for i, item := range val.Friday {
-					if item.EventID == relatesTo.EventID {
-						val.Friday[i].EventID = item.EventID
-						val.Friday[i].Body = messageEventContent.NewContent.Body
-						val.Friday[i].FormattedBody = messageEventContent.NewContent.FormattedBody
-						break
-					}
-				}
-				for i, item := range val.Weekend {
-					if item.EventID == relatesTo.EventID {
-						val.Weekend[i].EventID = item.EventID
-						val.Weekend[i].Body = messageEventContent.NewContent.Body
-						val.Weekend[i].FormattedBody = messageEventContent.NewContent.FormattedBody
-						break
-					}
-				}
-				for i, item := range val.Today {
-					if item.EventID == relatesTo.EventID {
-						val.Today[i].EventID = item.EventID
-						val.Today[i].Body = messageEventContent.NewContent.Body
-						val.Today[i].FormattedBody = messageEventContent.NewContent.FormattedBody
-						break
-					}
-				}
-				for i, item := range val.Blockers {
-					if item.EventID == relatesTo.EventID {
-						val.Blockers[i].EventID = item.EventID
-						val.Blockers[i].Body = messageEventContent.NewContent.Body
-						val.Blockers[i].FormattedBody = messageEventContent.NewContent.FormattedBody
-						break
-					}
-				}
-				for i, item := range val.Notes {
-					if item.EventID == relatesTo.EventID {
-						val.Notes[i].EventID = item.EventID
-						val.Notes[i].Body = messageEventContent.NewContent.Body
-						val.Notes[i].FormattedBody = messageEventContent.NewContent.FormattedBody
+				// This is an edit. If it's an edit to one of
+				// the messages in the current standup, then
+				// edit the entry in the corresponding list.
+				standupLists := [][]StandupItem{val.Yesterday, val.Friday, val.Weekend, val.Today, val.Blockers, val.Notes}
+				edited := false
+				for _, standupList := range standupLists {
+					if tryEditListItem(standupList, relatesTo.EventID, messageEventContent.NewContent) {
+						edited = true
 						break
 					}
 				}
 
-				if val.State == Confirm {
-					val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
-				} else if val.State == Sent {
-					client.RedactEvent(event.RoomID, val.PreviewEventId)
-					ShowMessagePreview(event, val, true)
+				if edited {
+					if val.State == Confirm {
+						val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
+					} else if val.State == Sent {
+						client.RedactEvent(event.RoomID, val.PreviewEventId)
+						ShowMessagePreview(event, val, true)
+					}
 				}
 
 				return
@@ -588,45 +561,64 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 func HandleRedaction(_ mautrix.EventSource, event *mevent.Event) {
 	// Handle redactions
 	if val, found := currentStandupFlows[event.Sender]; found {
+		removedItem := false
 		for i, item := range val.Yesterday {
 			if item.EventID == event.Redacts {
+				removedItem = true
 				val.Yesterday = append(val.Yesterday[:i], val.Yesterday[i+1:]...)
 				break
 			}
 		}
-		for i, item := range val.Friday {
-			if item.EventID == event.Redacts {
-				val.Friday = append(val.Friday[:i], val.Friday[i+1:]...)
-				break
+		if !removedItem {
+			for i, item := range val.Friday {
+				if item.EventID == event.Redacts {
+					removedItem = true
+					val.Friday = append(val.Friday[:i], val.Friday[i+1:]...)
+					break
+				}
 			}
 		}
-		for i, item := range val.Weekend {
-			if item.EventID == event.Redacts {
-				val.Weekend = append(val.Weekend[:i], val.Weekend[i+1:]...)
-				break
+		if !removedItem {
+			for i, item := range val.Weekend {
+				if item.EventID == event.Redacts {
+					removedItem = true
+					val.Weekend = append(val.Weekend[:i], val.Weekend[i+1:]...)
+					break
+				}
 			}
 		}
-		for i, item := range val.Today {
-			if item.EventID == event.Redacts {
-				val.Today = append(val.Today[:i], val.Today[i+1:]...)
-				break
+		if !removedItem {
+			for i, item := range val.Today {
+				if item.EventID == event.Redacts {
+					removedItem = true
+					val.Today = append(val.Today[:i], val.Today[i+1:]...)
+					break
+				}
 			}
 		}
-		for i, item := range val.Blockers {
-			if item.EventID == event.Redacts {
-				val.Blockers = append(val.Blockers[:i], val.Blockers[i+1:]...)
-				break
+		if !removedItem {
+			for i, item := range val.Blockers {
+				if item.EventID == event.Redacts {
+					removedItem = true
+					val.Blockers = append(val.Blockers[:i], val.Blockers[i+1:]...)
+					break
+				}
 			}
 		}
-		for i, item := range val.Notes {
-			if item.EventID == event.Redacts {
-				val.Notes = append(val.Notes[:i], val.Notes[i+1:]...)
-				break
+		if !removedItem {
+			for i, item := range val.Notes {
+				if item.EventID == event.Redacts {
+					removedItem = true
+					val.Notes = append(val.Notes[:i], val.Notes[i+1:]...)
+					break
+				}
 			}
 		}
 
-		if val.PreviewEventId.String() != "" {
-			val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
+		if removedItem {
+			if val.PreviewEventId.String() != "" {
+				val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
+			}
 		}
 	}
 }

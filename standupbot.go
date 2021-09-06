@@ -106,6 +106,8 @@ func main() {
 					_, err = currentStandupFlowsFile.Write(bytes)
 					if err != nil {
 						log.Error("Failed to write current standup flows JSON to file!")
+					} else {
+						log.Info("Saved current flows to disk.")
 					}
 				}
 				currentStandupFlowsFile.Close()
