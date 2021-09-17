@@ -216,7 +216,7 @@ func main() {
 		db,
 		"sqlite3",
 		username.String(),
-		mid.DeviceID("Bot Host"),
+		client.DeviceID,
 		[]byte("standupbot_cryptostore_key"),
 		CryptoLogger{},
 	)
