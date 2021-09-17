@@ -1,3 +1,9 @@
+# v0.3.0
+
+* Fixed a bug with device ID that broke encryption for many users. It is
+  recommended to just blow away the database and current flow states and start
+  over.
+
 # v0.2.7
 
 * Improved detection of standupbot command messages.
