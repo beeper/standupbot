@@ -94,7 +94,7 @@ func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *m
 			return client.SendMessageEvent(roomId, mevent.EventMessage, content)
 		}
 	})
-	if err != nil {
+	if err != nil || r == nil {
 		// give up
 		log.Errorf("Failed to send message to %s: %s", roomId, err)
 		return nil, err
