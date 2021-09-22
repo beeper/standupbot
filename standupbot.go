@@ -272,9 +272,9 @@ func main() {
 	syncer.OnEventType(mevent.EventEncrypted, func(source mautrix.EventSource, event *mevent.Event) {
 		decryptedEvent, err := olmMachine.DecryptMegolmEvent(event)
 		if err != nil {
-			log.Warn("Failed to decrypt: ", err)
+			log.Errorf("Failed to decrypt message from %s in %s: %+v", event.Sender, event.RoomID, err)
 		} else {
-			log.Debug("Received encrypted event")
+			log.Debugf("Received encrypted event from %s in %s", event.Sender, event.RoomID)
 			if decryptedEvent.Type == mevent.EventMessage {
 				go HandleMessage(source, decryptedEvent)
 			} else if decryptedEvent.Type == mevent.EventReaction {
