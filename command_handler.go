@@ -391,6 +391,9 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		}
 
 		if val, found := currentStandupFlows[event.Sender]; found {
+			// Mark the message as read after we've handled it.
+			defer client.MarkRead(event.RoomID, event.ID)
+
 			relatesTo := messageEventContent.RelatesTo
 			if relatesTo != nil && relatesTo.Type == mevent.RelReplace {
 				// This is an edit. If it's an edit to one of
@@ -452,6 +455,9 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		// This is not a bot command. Return.
 		return
 	}
+
+	// Mark the message as read after we've handled it.
+	defer client.MarkRead(event.RoomID, event.ID)
 
 	stateStore.SetConfigRoom(event.Sender, event.RoomID)
 
@@ -565,6 +571,9 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 }
 
 func HandleRedaction(_ mautrix.EventSource, event *mevent.Event) {
+	// Mark the redaction as read after we've handled it.
+	defer client.MarkRead(event.RoomID, event.ID)
+
 	// Handle redactions
 	if val, found := currentStandupFlows[event.Sender]; found {
 		removedItem := false

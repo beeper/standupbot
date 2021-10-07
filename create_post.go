@@ -264,6 +264,9 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 		return
 	}
 
+	// Mark the reaction as read after we've handled it.
+	defer client.MarkRead(event.RoomID, event.ID)
+
 	if reactionEventContent.RelatesTo.Key == CHECKMARK {
 		currentFlow.ReactableEvents = make([]mid.EventID, 0)
 
