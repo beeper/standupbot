@@ -8,21 +8,28 @@ import (
 )
 
 type StateStore struct {
-	DB                  *sql.DB
-	Client              *mautrix.Client
-	UserConfigRoomCache map[mid.UserID]mid.RoomID
-	UserTimezoneCache   map[mid.UserID]string
-	UserNotifyTimeCache map[mid.UserID]int
-	UserSendRoomCache   map[mid.UserID]mid.RoomID
+	DB              *sql.DB
+	Client          *mautrix.Client
+	UserConfigRooms map[mid.UserID]mid.RoomID
+
+	// Caches for configuration.
+	// If these become too large, we can make these LRU caches, but for
+	// now, they are small enough they don't matter.
+	userTimezoneCache   map[mid.UserID]string
+	userNotifyTimeCache map[mid.UserID]int
+	userSendRoomCache   map[mid.UserID]mid.RoomID
+	userUseThreadsCache map[mid.UserID]bool
 }
 
 func NewStateStore(db *sql.DB) *StateStore {
 	return &StateStore{
-		DB:                  db,
-		UserConfigRoomCache: map[mid.UserID]mid.RoomID{},
-		UserTimezoneCache:   map[mid.UserID]string{},
-		UserNotifyTimeCache: map[mid.UserID]int{},
-		UserSendRoomCache:   map[mid.UserID]mid.RoomID{},
+		DB:              db,
+		UserConfigRooms: map[mid.UserID]mid.RoomID{},
+
+		userTimezoneCache:   map[mid.UserID]string{},
+		userNotifyTimeCache: map[mid.UserID]int{},
+		userSendRoomCache:   map[mid.UserID]mid.RoomID{},
+		userUseThreadsCache: map[mid.UserID]bool{},
 	}
 }
 

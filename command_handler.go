@@ -129,6 +129,7 @@ func SendHelp(roomId mid.RoomID) {
 * tz [timezone] -- show or set the timezone to use for configuring notifications
 * notify [time] -- show or set the time at which the standup notification will be sent
 * room [room alias or ID] -- show or set the room where your standup notification will be sent
+* threads [true|false] -- whether or not to use threads for composing standup posts
 
 Version %s. Source code: https://sr.ht/~sumner/standupbot/`
 	noticeHtml := `<b>COMMANDS:</b>
@@ -143,6 +144,7 @@ Version %s. Source code: https://sr.ht/~sumner/standupbot/`
 <li><b>tz [timezone]</b> &mdash; show or set the timezone to use for configuring notifications</li>
 <li><b>notify [time]</b> &mdash; show or set the time at which the standup notification will be sent</li>
 <li><b>room [room alias or ID]</b> &mdash; show or set the room where your standup notification will be sent</li>
+<li><b>threads [true|false]</b> &mdash; whether or not to use threads for composing standup posts</li>
 </ul>
 
 Version %s. <a href="https://sr.ht/~sumner/standupbot/">Source code</a>.`
@@ -236,17 +238,59 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 	SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 }
 
+// Threads
+func HandleThreads(roomID mid.RoomID, sender mid.UserID, params []string) {
+	if len(params) == 0 {
+		useThreads, err := stateStore.GetUseThreads(sender)
+		var noticeText string
+		if err != nil {
+			noticeText = "Use threads setting is not set. Will default to not using threads."
+		} else if useThreads {
+			noticeText = "Using threads is enabled."
+		} else {
+			noticeText = "Using threads is not enabled."
+		}
+
+		SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		return
+	}
+
+	useThreadsStr := strings.ToLower(params[0])
+	var useThreads bool
+	if useThreadsStr == "true" {
+		useThreads = true
+	} else if useThreadsStr == "false" {
+		useThreads = false
+	} else {
+		noticeText := fmt.Sprintf("Failed setting use threads option: %s is not valid. Use 'true' or 'false'.", useThreadsStr)
+		SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		return
+	}
+
+	stateKey := strings.TrimPrefix(sender.String(), "@")
+	_, err := client.SendStateEvent(roomID, types.StateUseThreads, stateKey, types.UseThreadsEventContent{
+		UseThreads: useThreads,
+	})
+	var noticeText string
+	if err != nil {
+		noticeText = fmt.Sprintf("Failed setting use threads option: %+v", err)
+	} else {
+		noticeText = fmt.Sprintf("Set use threads option to %s", useThreadsStr)
+		stateStore.SetUseThreads(sender, useThreads)
+	}
+	SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+}
+
 // Room
 func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
 	stateKey := strings.TrimPrefix(event.Sender.String(), "@")
 	if len(params) == 0 {
-		var sendRoomEventContent types.SendRoomEventContent
-		err := client.StateEvent(roomID, types.StateSendRoom, stateKey, &sendRoomEventContent)
+		sendRoomID, err := stateStore.GetSendRoomId(event.Sender)
 		var noticeText string
 		if err != nil {
 			noticeText = "Send room not set"
 		} else {
-			noticeText = fmt.Sprintf("Send room is set to %s", sendRoomEventContent.SendRoomID)
+			noticeText = fmt.Sprintf("Send room is set to %s", sendRoomID)
 		}
 
 		SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
@@ -456,6 +500,9 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		break
 	case "notify":
 		HandleNotify(event.RoomID, event.Sender, commandParts[1:])
+		break
+	case "threads":
+		HandleThreads(event.RoomID, event.Sender, commandParts[1:])
 		break
 	case "new":
 		currentStandupFlows[event.Sender] = BlankStandupFlow()

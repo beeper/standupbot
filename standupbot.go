@@ -200,6 +200,13 @@ func main() {
 					stateStore.SetConfigRoom(userID, roomID)
 					stateStore.SetSendRoomId(userID, sendRoomEventContent.SendRoomID)
 				}
+
+				var useThreadsEventContent types.UseThreadsEventContent
+				if err := client.StateEvent(roomID, types.StateUseThreads, stateKey, &useThreadsEventContent); err == nil {
+					log.Infof("Loaded thread usage setting (%b) for %s from state", useThreadsEventContent.UseThreads, userID)
+					stateStore.SetConfigRoom(userID, roomID)
+					stateStore.SetUseThreads(userID, useThreadsEventContent.UseThreads)
+				}
 			}
 		}
 	}
