@@ -292,6 +292,9 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 		futureEditId = *editEventID
 	} else {
 		sent, err = SendMessage(sendRoomID, newPost)
+		if err != nil {
+			futureEditId = sent.EventID
+		}
 	}
 
 	if err != nil {
@@ -300,7 +303,6 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 			Body:    "Failed to send standup post" + editStr + " to " + sendRoomID.String(),
 		})
 	} else {
-		futureEditId = sent.EventID
 		SendMessage(event.RoomID, mevent.MessageEventContent{
 			MsgType: mevent.MsgText,
 			Body:    "Sent standup post" + editStr + " to " + sendRoomID.String(),
