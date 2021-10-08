@@ -1,13 +1,29 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+
+	"maunium.net/go/mautrix"
+	mid "maunium.net/go/mautrix/id"
+)
 
 type StateStore struct {
-	DB *sql.DB
+	DB                  *sql.DB
+	Client              *mautrix.Client
+	UserConfigRoomCache map[mid.UserID]mid.RoomID
+	UserTimezoneCache   map[mid.UserID]string
+	UserNotifyTimeCache map[mid.UserID]int
+	UserSendRoomCache   map[mid.UserID]mid.RoomID
 }
 
 func NewStateStore(db *sql.DB) *StateStore {
-	return &StateStore{DB: db}
+	return &StateStore{
+		DB:                  db,
+		UserConfigRoomCache: map[mid.UserID]mid.RoomID{},
+		UserTimezoneCache:   map[mid.UserID]string{},
+		UserNotifyTimeCache: map[mid.UserID]int{},
+		UserSendRoomCache:   map[mid.UserID]mid.RoomID{},
+	}
 }
 
 func (store *StateStore) CreateTables() error {
@@ -49,13 +65,7 @@ func (store *StateStore) CreateTables() error {
 		)
 		`,
 		`
-		CREATE TABLE IF NOT EXISTS user_config_room (
-			user_id                 VARCHAR(255) PRIMARY KEY,
-			room_id                 VARCHAR(255),
-			timezone                VARCHAR(255),
-			minutes_after_midnight  INTEGER,
-			send_room_id            VARCHAR(255)
-		)
+		DROP TABLE IF EXISTS user_config_room
 		`,
 	}
 

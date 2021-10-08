@@ -14,6 +14,8 @@ import (
 	mcrypto "maunium.net/go/mautrix/crypto"
 	mevent "maunium.net/go/mautrix/event"
 	mid "maunium.net/go/mautrix/id"
+
+	"git.sr.ht/~sumner/standupbot/types"
 )
 
 type StandupFlowState int
@@ -154,19 +156,13 @@ Version %s. <a href="https://sr.ht/~sumner/standupbot/">Source code</a>.`
 }
 
 // Timezone
-var StateTzSetting = mevent.Type{"com.nevarro.standupbot.timezone", mevent.StateEventType}
-
-type TzSettingEventContent struct {
-	TzString string
-}
-
 func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
 	stateKey := strings.TrimPrefix(sender.String(), "@")
 	if len(params) == 0 {
 		tzStr := "not set"
 
-		var tzSettingEventContent TzSettingEventContent
-		err := client.StateEvent(roomId, StateTzSetting, stateKey, &tzSettingEventContent)
+		var tzSettingEventContent types.TzSettingEventContent
+		err := client.StateEvent(roomId, types.StateTzSetting, stateKey, &tzSettingEventContent)
 		if err == nil {
 			tzStr = tzSettingEventContent.TzString
 		}
@@ -182,7 +178,7 @@ func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
 		SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: errorMessageText})
 	}
 
-	_, err = client.SendStateEvent(roomId, StateTzSetting, stateKey, TzSettingEventContent{
+	_, err = client.SendStateEvent(roomId, types.StateTzSetting, stateKey, types.TzSettingEventContent{
 		TzString: location.String(),
 	})
 	noticeText := fmt.Sprintf("Timezone set to %s", location.String())
@@ -195,17 +191,11 @@ func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
 }
 
 // Notify
-var StateNotify = mevent.Type{"com.nevarro.standupbot.notify", mevent.StateEventType}
-
-type NotifyEventContent struct {
-	MinutesAfterMidnight int
-}
-
 func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 	stateKey := strings.TrimPrefix(sender.String(), "@")
 	if len(params) == 0 {
-		var notifyEventContent NotifyEventContent
-		err := client.StateEvent(roomId, StateNotify, stateKey, &notifyEventContent)
+		var notifyEventContent types.NotifyEventContent
+		err := client.StateEvent(roomId, types.StateNotify, stateKey, &notifyEventContent)
 		var noticeText string
 		if err != nil {
 			noticeText = "Notification time is not set"
@@ -233,7 +223,7 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 		} else {
 			noticeText = fmt.Sprintf("Notification time set to %02d:%02d", hours, minutes)
 			minutesAfterMidnight := minutes + hours*60
-			_, err := client.SendStateEvent(roomId, StateNotify, stateKey, NotifyEventContent{
+			_, err := client.SendStateEvent(roomId, types.StateNotify, stateKey, types.NotifyEventContent{
 				MinutesAfterMidnight: minutesAfterMidnight,
 			})
 			if err != nil {
@@ -247,17 +237,11 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 }
 
 // Room
-var StateSendRoom = mevent.Type{"com.nevarro.standupbot.send_room", mevent.StateEventType}
-
-type SendRoomEventContent struct {
-	SendRoomID mid.RoomID
-}
-
 func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
 	stateKey := strings.TrimPrefix(event.Sender.String(), "@")
 	if len(params) == 0 {
-		var sendRoomEventContent SendRoomEventContent
-		err := client.StateEvent(roomID, StateSendRoom, stateKey, &sendRoomEventContent)
+		var sendRoomEventContent types.SendRoomEventContent
+		err := client.StateEvent(roomID, types.StateSendRoom, stateKey, &sendRoomEventContent)
 		var noticeText string
 		if err != nil {
 			noticeText = "Send room not set"
@@ -285,7 +269,7 @@ func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
 	} else {
 		sendRoomID := respJoinRoom.(*mautrix.RespJoinRoom).RoomID
 		noticeText = fmt.Sprintf("Joined %s and set that as your send room", roomIdToJoin)
-		_, err := client.SendStateEvent(roomID, StateSendRoom, stateKey, SendRoomEventContent{
+		_, err := client.SendStateEvent(roomID, types.StateSendRoom, stateKey, types.SendRoomEventContent{
 			SendRoomID: sendRoomID,
 		})
 		if err != nil {
@@ -533,10 +517,15 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		if val, found := currentStandupFlows[event.Sender]; !found || val.State != Sent {
 			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No sent standup post to undo."})
 		} else {
-			sendRoomID := stateStore.GetSendRoomId(event.Sender)
+			sendRoomID, err := stateStore.GetSendRoomId(event.Sender)
+			if err != nil {
+				log.Debugf("No send room configured for %s, can't undo anything", event.Sender)
+				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No send room configured. Can't undo anything."})
+			}
+
 			stateKey := strings.TrimPrefix(event.Sender.String(), "@")
 			var previousPostEventContent PreviousPostEventContent
-			err := client.StateEvent(event.RoomID, StatePreviousPost, stateKey, &previousPostEventContent)
+			err = client.StateEvent(event.RoomID, StatePreviousPost, stateKey, &previousPostEventContent)
 			if err != nil {
 				log.Debug("Couldn't find previous post info.")
 				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No previous standup post to undo."})

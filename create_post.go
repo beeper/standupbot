@@ -174,8 +174,8 @@ func ShowMessagePreview(event *mevent.Event, currentFlow *StandupFlow, isEditOfE
 }
 
 func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEventID *mid.EventID) {
-	sendRoomID := stateStore.GetSendRoomId(event.Sender)
-	if sendRoomID.String() == "" {
+	sendRoomID, err := stateStore.GetSendRoomId(event.Sender)
+	if err != nil {
 		SendMessage(event.RoomID, mevent.MessageEventContent{
 			MsgType:       mevent.MsgText,
 			Body:          "No send room set! Set one using `!standupbot room [room ID or alias]`",
@@ -203,7 +203,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 
 	newPost := FormatPost(event.Sender, currentFlow, false, false, false)
 	var futureEditId mid.EventID
-	var err error
+	var sent *mautrix.RespSendEvent
 	editStr := ""
 	if editEventID != nil {
 		_, err = SendMessage(sendRoomID, mevent.MessageEventContent{
@@ -220,9 +220,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 		editStr = " edit"
 		futureEditId = *editEventID
 	} else {
-		var sent *mautrix.RespSendEvent
 		sent, err = SendMessage(sendRoomID, newPost)
-		futureEditId = sent.EventID
 	}
 
 	if err != nil {
@@ -231,6 +229,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 			Body:    "Failed to send standup post" + editStr + " to " + sendRoomID.String(),
 		})
 	} else {
+		futureEditId = sent.EventID
 		SendMessage(event.RoomID, mevent.MessageEventContent{
 			MsgType: mevent.MsgText,
 			Body:    "Sent standup post" + editStr + " to " + sendRoomID.String(),

@@ -20,6 +20,7 @@ import (
 	mid "maunium.net/go/mautrix/id"
 
 	"git.sr.ht/~sumner/standupbot/store"
+	"git.sr.ht/~sumner/standupbot/types"
 )
 
 var client *mautrix.Client
@@ -157,6 +158,7 @@ func main() {
 
 	// set the client store on the client.
 	client.Store = stateStore
+	stateStore.Client = client
 
 	// Load state from all of the rooms that we are joined to in case the
 	// database died.
@@ -176,8 +178,8 @@ func main() {
 			for _, userID := range potentialUsers {
 				stateKey := strings.TrimPrefix(userID.String(), "@")
 
-				var tzSettingEventContent TzSettingEventContent
-				if err := client.StateEvent(roomID, StateTzSetting, stateKey, &tzSettingEventContent); err == nil {
+				var tzSettingEventContent types.TzSettingEventContent
+				if err := client.StateEvent(roomID, types.StateTzSetting, stateKey, &tzSettingEventContent); err == nil {
 					if location, err := time.LoadLocation(tzSettingEventContent.TzString); err == nil {
 						log.Infof("Loaded timezone (%s) for %s from state", location, userID)
 						stateStore.SetConfigRoom(userID, roomID)
@@ -185,15 +187,15 @@ func main() {
 					}
 				}
 
-				var notifyEventContent NotifyEventContent
-				if err := client.StateEvent(roomID, StateNotify, stateKey, &notifyEventContent); err == nil {
+				var notifyEventContent types.NotifyEventContent
+				if err := client.StateEvent(roomID, types.StateNotify, stateKey, &notifyEventContent); err == nil {
 					log.Infof("Loaded notification minutes after midnight (%d) for %s from state", notifyEventContent.MinutesAfterMidnight, userID)
 					stateStore.SetConfigRoom(userID, roomID)
 					stateStore.SetNotify(userID, notifyEventContent.MinutesAfterMidnight)
 				}
 
-				var sendRoomEventContent SendRoomEventContent
-				if err := client.StateEvent(roomID, StateSendRoom, stateKey, &sendRoomEventContent); err == nil {
+				var sendRoomEventContent types.SendRoomEventContent
+				if err := client.StateEvent(roomID, types.StateSendRoom, stateKey, &sendRoomEventContent); err == nil {
 					log.Infof("Loaded send room (%s) for %s from state", sendRoomEventContent.SendRoomID, userID)
 					stateStore.SetConfigRoom(userID, roomID)
 					stateStore.SetSendRoomId(userID, sendRoomEventContent.SendRoomID)
@@ -247,7 +249,6 @@ func main() {
 			}
 		} else if event.GetStateKey() == username.String() && event.Content.AsMember().Membership.IsLeaveOrBan() {
 			log.Infof("Left or banned from %s", event.RoomID)
-			stateStore.RemoveConfigRoom(event.RoomID)
 		} else {
 			roomMembers := stateStore.GetRoomMembers(event.RoomID)
 			if len(roomMembers) == 1 && roomMembers[0] == username {
