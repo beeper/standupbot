@@ -354,10 +354,12 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 				currentFlow.State = Sent
 				return
 			}
-		} else if currentFlow.PreviewEventId.String() != "" && currentFlow.State != Confirm && currentFlow.State != Sent {
-			// this means we have already gone through the flow, and we went back to edit.
-			client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
-			currentFlow.State = Notes
+		} else if currentFlow.PreviewEventId.String() != "" {
+			if currentFlow.State != Confirm && currentFlow.State != Sent && currentFlow.State != Threads && currentFlow.State != ThreadsFriday {
+				// this means we have already gone through the flow, and we went back to edit.
+				client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
+				currentFlow.State = Notes
+			}
 		}
 
 		switch currentFlow.State {
@@ -380,10 +382,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 			ShowMessagePreview(event.RoomID, event.Sender, currentFlow, false)
 			currentFlow.State = Confirm
 			return
-		case Threads, ThreadsFriday:
-			SendMessageToSendRoom(event, currentFlow, nil)
-			return
-		case Confirm:
+		case Threads, ThreadsFriday, Confirm:
 			SendMessageToSendRoom(event, currentFlow, nil)
 			return
 		case Sent:
