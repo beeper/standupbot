@@ -64,21 +64,30 @@ func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowS
 	case Notes:
 		question = "Do you have any other notes?"
 		break
-	case Threads, ThreadsFriday:
-		question = "Fill out the standup post by replying in each thread."
-		break
 	}
 
-	resp, err := sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
-		MsgType:       mevent.MsgText,
-		Body:          fmt.Sprintf("%s *Enter one item per message. React with ✅ when done.*", question),
-		Format:        mevent.FormatHTML,
-		FormattedBody: fmt.Sprintf("%s <i>Enter one item per message. React with ✅ when done.</i>", question),
-	})
+	var resp *mautrix.RespSendEvent
+	var err error
+	if state == Threads || state == ThreadsFriday {
+		resp, err = SendMessage(roomID, mevent.MessageEventContent{
+			MsgType:       mevent.MsgText,
+			Body:          "**Fill out the standup post by replying in each thread.** *Enter one item per message.*",
+			Format:        mevent.FormatHTML,
+			FormattedBody: "<b>Fill out the standup post by replying in each thread.</b> <i>Enter one item per message.</i>",
+		})
+	} else {
+		resp, err = sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
+			MsgType:       mevent.MsgText,
+			Body:          fmt.Sprintf("%s *Enter one item per message. React with ✅ when done.*", question),
+			Format:        mevent.FormatHTML,
+			FormattedBody: fmt.Sprintf("%s <i>Enter one item per message. React with ✅ when done.</i>", question),
+		})
+	}
 	if err != nil {
 		log.Errorf("Failed to send notice asking '%s'!", question)
 		return
 	}
+
 	if _, found := currentStandupFlows[userID]; !found {
 		currentStandupFlows[userID] = BlankStandupFlow()
 	}
