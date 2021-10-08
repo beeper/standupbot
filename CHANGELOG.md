@@ -1,3 +1,12 @@
+# v0.4.0
+
+* **Thread Mode:** Added ability to use standupbot in threaded mode. To enable,
+  type `!su threads true` in your bot DM room.
+* The bot now marks all events (including edits) as read after processing them.
+* Fixed some bugs and idiosyncrasies with authentication to Matrix.
+* Eliminated the `user_config_room` table making the bot less stateful, instead
+  relying on the state events stored in the DM rooms.
+
 # v0.3.0
 
 * Fixed a bug with device ID that broke encryption for many users. It is

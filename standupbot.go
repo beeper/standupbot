@@ -28,7 +28,7 @@ var configuration Configuration
 var olmMachine *mcrypto.OlmMachine
 var stateStore *store.StateStore
 
-var VERSION = "0.2.7"
+var VERSION = "0.4.0"
 
 func main() {
 	// Arg parsing
