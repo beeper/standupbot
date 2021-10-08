@@ -16,7 +16,7 @@ const CHECKMARK = "✅"
 const RED_X = "❌"
 
 // Previous Post
-var StatePreviousPost = mevent.Type{"com.nevarro.standupbot.previous_post", mevent.StateEventType}
+var StatePreviousPost = mevent.Type{Type: "com.nevarro.standupbot.previous_post", Class: mevent.StateEventType}
 
 type PreviousPostEventContent struct {
 	EditEventID mid.EventID
@@ -32,6 +32,15 @@ func sendMessageWithCheckmarkReaction(roomID mid.RoomID, message mevent.MessageE
 	}
 	SendReaction(roomID, resp.EventID, CHECKMARK)
 	return resp, nil
+}
+
+func sendThreadRootMessage(roomID mid.RoomID, header string) (*mautrix.RespSendEvent, error) {
+	return SendMessage(roomID, mevent.MessageEventContent{
+		MsgType:       mevent.MsgText,
+		Body:          fmt.Sprintf("**%s** (thread)", header),
+		Format:        mevent.FormatHTML,
+		FormattedBody: fmt.Sprintf("<b>%s</b> <i>(thread)</i>", header),
+	})
 }
 
 func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowState) {
@@ -55,6 +64,9 @@ func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowS
 	case Notes:
 		question = "Do you have any other notes?"
 		break
+	case Threads, ThreadsFriday:
+		question = "Fill out the standup post by replying in each thread."
+		break
 	}
 
 	resp, err := sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
@@ -72,6 +84,55 @@ func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowS
 	}
 	currentStandupFlows[userID].State = state
 	currentStandupFlows[userID].ReactableEvents = append(currentStandupFlows[userID].ReactableEvents, resp.EventID)
+
+	if state == Threads || state == ThreadsFriday {
+		if state == ThreadsFriday {
+			resp, err := sendThreadRootMessage(roomID, "Friday")
+			if err != nil {
+				log.Error("Unable to send thread root for Friday")
+				return
+			}
+			currentStandupFlows[userID].FridayThreadEvents = []mid.EventID{resp.EventID}
+
+			resp, err = sendThreadRootMessage(roomID, "Weekend")
+			if err != nil {
+				log.Error("Unable to send thread root for Weekend")
+				return
+			}
+			currentStandupFlows[userID].WeekendThreadEvents = []mid.EventID{resp.EventID}
+		} else {
+			resp, err = sendThreadRootMessage(roomID, "Yesterday")
+			if err != nil {
+				log.Error("Unable to send thread root for Yesterday")
+				return
+			}
+			currentStandupFlows[userID].YesterdayThreadEvents = []mid.EventID{resp.EventID}
+		}
+
+		resp, err = sendThreadRootMessage(roomID, "Today")
+		if err != nil {
+			log.Error("Unable to send thread root for Today")
+			return
+		}
+		currentStandupFlows[userID].TodayThreadEvents = []mid.EventID{resp.EventID}
+
+		resp, err = sendThreadRootMessage(roomID, "Blockers")
+		if err != nil {
+			log.Error("Unable to send thread root for Blockers")
+			return
+		}
+		currentStandupFlows[userID].BlockersThreadEvents = []mid.EventID{resp.EventID}
+
+		resp, err = sendThreadRootMessage(roomID, "Notes")
+		if err != nil {
+			log.Error("Unable to send thread root for Notes")
+			return
+		}
+		currentStandupFlows[userID].NotesThreadEvents = []mid.EventID{resp.EventID}
+
+		// Show the preview
+		ShowMessagePreview(roomID, userID, currentStandupFlows[userID], false)
+	}
 }
 
 func CreatePost(roomID mid.RoomID, userID mid.UserID) {
@@ -84,9 +145,19 @@ func CreatePost(roomID mid.RoomID, userID mid.UserID) {
 		log.Debug("Found previous post info ", previousPostEventContent)
 	}
 
-	nextState := Yesterday
-	if stateStore.GetCurrentWeekdayInUserTimezone(userID) == time.Monday {
-		nextState = Friday
+	useThreads, _ := stateStore.GetUseThreads(userID)
+	var nextState StandupFlowState
+
+	if useThreads {
+		nextState = Threads
+		if stateStore.GetCurrentWeekdayInUserTimezone(userID) == time.Monday {
+			nextState = ThreadsFriday
+		}
+	} else {
+		nextState = Yesterday
+		if stateStore.GetCurrentWeekdayInUserTimezone(userID) == time.Monday {
+			nextState = Friday
+		}
 	}
 
 	GoToStateAndNotify(roomID, userID, nextState)
@@ -163,14 +234,14 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendC
 	}
 }
 
-func ShowMessagePreview(event *mevent.Event, currentFlow *StandupFlow, isEditOfExisting bool) {
-	resp, err := SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, true, isEditOfExisting))
+func ShowMessagePreview(roomID mid.RoomID, userID mid.UserID, currentFlow *StandupFlow, isEditOfExisting bool) {
+	resp, err := SendMessage(roomID, FormatPost(userID, currentFlow, true, true, isEditOfExisting))
 	if err == nil {
-		SendReaction(event.RoomID, resp.EventID, CHECKMARK)
-		SendReaction(event.RoomID, resp.EventID, RED_X)
+		SendReaction(roomID, resp.EventID, CHECKMARK)
+		SendReaction(roomID, resp.EventID, RED_X)
 	}
 	currentFlow.PreviewEventId = resp.EventID
-	currentStandupFlows[event.Sender].ReactableEvents = append(currentStandupFlows[event.Sender].ReactableEvents, resp.EventID)
+	currentStandupFlows[userID].ReactableEvents = append(currentStandupFlows[userID].ReactableEvents, resp.EventID)
 }
 
 func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEventID *mid.EventID) {
@@ -277,7 +348,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 			if currentFlow.State != Sent {
 				// this means that we have already gone through the flow, sent the message, then went back to edit.
 				client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
-				ShowMessagePreview(event, currentFlow, false)
+				ShowMessagePreview(event.RoomID, event.Sender, currentFlow, false)
 				currentFlow.State = Sent
 				return
 			}
@@ -304,8 +375,11 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 			GoToStateAndNotify(event.RoomID, event.Sender, Notes)
 			break
 		case Notes:
-			ShowMessagePreview(event, currentFlow, false)
+			ShowMessagePreview(event.RoomID, event.Sender, currentFlow, false)
 			currentFlow.State = Confirm
+			return
+		case Threads, ThreadsFriday:
+			SendMessageToSendRoom(event, currentFlow, nil)
 			return
 		case Confirm:
 			SendMessageToSendRoom(event, currentFlow, nil)

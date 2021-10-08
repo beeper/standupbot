@@ -30,6 +30,9 @@ const (
 	Notes
 	Confirm
 	Sent
+
+	Threads
+	ThreadsFriday
 )
 
 type StandupItem struct {
@@ -49,6 +52,14 @@ type StandupFlow struct {
 	Today           []StandupItem
 	Blockers        []StandupItem
 	Notes           []StandupItem
+
+	// Root events for threads
+	YesterdayThreadEvents []mid.EventID
+	FridayThreadEvents    []mid.EventID
+	WeekendThreadEvents   []mid.EventID
+	TodayThreadEvents     []mid.EventID
+	BlockersThreadEvents  []mid.EventID
+	NotesThreadEvents     []mid.EventID
 }
 
 var currentStandupFlows map[mid.UserID]*StandupFlow = make(map[mid.UserID]*StandupFlow)
@@ -65,6 +76,13 @@ func BlankStandupFlow() *StandupFlow {
 		Today:           make([]StandupItem, 0),
 		Blockers:        make([]StandupItem, 0),
 		Notes:           make([]StandupItem, 0),
+
+		YesterdayThreadEvents: make([]mid.EventID, 0),
+		FridayThreadEvents:    make([]mid.EventID, 0),
+		WeekendThreadEvents:   make([]mid.EventID, 0),
+		TodayThreadEvents:     make([]mid.EventID, 0),
+		BlockersThreadEvents:  make([]mid.EventID, 0),
+		NotesThreadEvents:     make([]mid.EventID, 0),
 	}
 }
 
@@ -327,7 +345,7 @@ func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
 
 	if currentFlow, found := currentStandupFlows[event.Sender]; found && currentFlow.State == Confirm {
 		client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
-		ShowMessagePreview(event, currentFlow, false)
+		ShowMessagePreview(event.RoomID, event.Sender, currentFlow, false)
 	}
 }
 
@@ -401,6 +419,97 @@ func tryEditListItem(standupList []StandupItem, editEventID mid.EventID, newCont
 	return false
 }
 
+func HandleEdit(event *mevent.Event, standupFlow *StandupFlow) {
+	// This is an edit. If it's an edit to one of the messages in the
+	// current standup, then edit the entry in the corresponding list.
+
+	messageEventContent := event.Content.AsMessage()
+	relatesTo := messageEventContent.RelatesTo
+	standupLists := [][]StandupItem{standupFlow.Yesterday, standupFlow.Friday, standupFlow.Weekend, standupFlow.Today, standupFlow.Blockers, standupFlow.Notes}
+	edited := false
+	for _, standupList := range standupLists {
+		if tryEditListItem(standupList, relatesTo.EventID, messageEventContent.NewContent) {
+			edited = true
+			break
+		}
+	}
+
+	if edited {
+		if standupFlow.State == Confirm {
+			standupFlow.ReactableEvents = EditPreview(event.RoomID, event.Sender, standupFlow)
+		} else if standupFlow.State == Sent {
+			client.RedactEvent(event.RoomID, standupFlow.PreviewEventId)
+			ShowMessagePreview(event.RoomID, event.Sender, standupFlow, true)
+		}
+	}
+}
+
+func HandleReply(event *mevent.Event, standupFlow *StandupFlow) {
+	// This is a reply. This only matters in thread mode.
+	switch standupFlow.State {
+	case Threads, ThreadsFriday, Confirm, Sent:
+		log.Info("Reply in thread mode.")
+		break
+	default:
+		log.Info("Reply not in thread mode.")
+		return
+	}
+
+	// Update the message preview after editing.
+	defer EditPreview(event.RoomID, event.Sender, standupFlow)
+
+	messageEventContent := event.Content.AsMessage()
+	relatesTo := messageEventContent.RelatesTo
+
+	standupItem := StandupItem{
+		EventID:       event.ID,
+		Body:          mevent.TrimReplyFallbackText(messageEventContent.Body),
+		FormattedBody: mevent.TrimReplyFallbackHTML(messageEventContent.FormattedBody),
+	}
+	for _, eventID := range standupFlow.YesterdayThreadEvents {
+		if eventID == relatesTo.EventID {
+			standupFlow.Yesterday = append(standupFlow.Yesterday, standupItem)
+			standupFlow.YesterdayThreadEvents = append(standupFlow.YesterdayThreadEvents, event.ID)
+			return
+		}
+	}
+	for _, eventID := range standupFlow.FridayThreadEvents {
+		if eventID == relatesTo.EventID {
+			standupFlow.Friday = append(standupFlow.Friday, standupItem)
+			standupFlow.FridayThreadEvents = append(standupFlow.FridayThreadEvents, event.ID)
+			return
+		}
+	}
+	for _, eventID := range standupFlow.WeekendThreadEvents {
+		if eventID == relatesTo.EventID {
+			standupFlow.Weekend = append(standupFlow.Weekend, standupItem)
+			standupFlow.WeekendThreadEvents = append(standupFlow.WeekendThreadEvents, event.ID)
+			return
+		}
+	}
+	for _, eventID := range standupFlow.TodayThreadEvents {
+		if eventID == relatesTo.EventID {
+			standupFlow.Today = append(standupFlow.Today, standupItem)
+			standupFlow.TodayThreadEvents = append(standupFlow.TodayThreadEvents, event.ID)
+			return
+		}
+	}
+	for _, eventID := range standupFlow.BlockersThreadEvents {
+		if eventID == relatesTo.EventID {
+			standupFlow.Blockers = append(standupFlow.Blockers, standupItem)
+			standupFlow.BlockersThreadEvents = append(standupFlow.BlockersThreadEvents, event.ID)
+			return
+		}
+	}
+	for _, eventID := range standupFlow.NotesThreadEvents {
+		if eventID == relatesTo.EventID {
+			standupFlow.Notes = append(standupFlow.Notes, standupItem)
+			standupFlow.NotesThreadEvents = append(standupFlow.NotesThreadEvents, event.ID)
+			return
+		}
+	}
+}
+
 func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 	userId := mid.UserID(configuration.Username)
 	if event.Sender == userId {
@@ -422,29 +531,14 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			// Mark the message as read after we've handled it.
 			defer client.MarkRead(event.RoomID, event.ID)
 
+			// Handle edits and thread replies
 			relatesTo := messageEventContent.RelatesTo
-			if relatesTo != nil && relatesTo.Type == mevent.RelReplace {
-				// This is an edit. If it's an edit to one of
-				// the messages in the current standup, then
-				// edit the entry in the corresponding list.
-				standupLists := [][]StandupItem{val.Yesterday, val.Friday, val.Weekend, val.Today, val.Blockers, val.Notes}
-				edited := false
-				for _, standupList := range standupLists {
-					if tryEditListItem(standupList, relatesTo.EventID, messageEventContent.NewContent) {
-						edited = true
-						break
-					}
+			if relatesTo != nil {
+				if relatesTo.Type == mevent.RelReplace {
+					HandleEdit(event, val)
+				} else if relatesTo.Type == mevent.RelReply {
+					HandleReply(event, val)
 				}
-
-				if edited {
-					if val.State == Confirm {
-						val.ReactableEvents = EditPreview(event.RoomID, event.Sender, val)
-					} else if val.State == Sent {
-						client.RedactEvent(event.RoomID, val.PreviewEventId)
-						ShowMessagePreview(event, val, true)
-					}
-				}
-
 				return
 			}
 
@@ -516,6 +610,13 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		}
 		break
 	case "edit":
+		if useThreads, _ := stateStore.GetUseThreads(event.Sender); useThreads {
+			SendMessage(event.RoomID, mevent.MessageEventContent{
+				MsgType: mevent.MsgNotice,
+				Body:    fmt.Sprintf("You cannot use !edit when using threads. Just reply to the corresponding thread."),
+			})
+			return
+		}
 		if len(commandParts) != 2 {
 			SendMessage(event.RoomID, mevent.MessageEventContent{
 				MsgType: mevent.MsgNotice,
