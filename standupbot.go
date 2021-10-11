@@ -32,25 +32,28 @@ var VERSION = "0.4.0"
 
 func main() {
 	// Arg parsing
-	configPath := flag.String("config", xdg.ConfigHome()+"/standupbot/config.json", "config file location")
+	configPath := flag.String("config", "./config.json", "config file location")
 	logLevelStr := flag.String("loglevel", "debug", "the log level")
+	logFilename := flag.String("logfile", "", "the log file to use (defaults to '' meaning no log file)")
 	flag.Parse()
 
 	// Configure logging
-	os.MkdirAll(xdg.DataHome()+"/standupbot", 0700)
-	logFile, err := os.OpenFile(xdg.DataHome()+"/standupbot/standupbot.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
-	if err == nil {
-		mw := io.MultiWriter(os.Stdout, logFile)
-		log.SetOutput(mw)
-	} else {
-		log.Errorf("failed to open logging file; using default stderr: %s", err)
+	if *logFilename != "" {
+		logFile, err := os.OpenFile(*logFilename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		if err == nil {
+			mw := io.MultiWriter(os.Stdout, logFile)
+			log.SetOutput(mw)
+		} else {
+			log.Errorf("Failed to open logging file; using default stderr: %s", err)
+		}
 	}
+	log.SetFormatter(&log.JSONFormatter{})
 	log.SetLevel(log.DebugLevel)
 	logLevel, err := log.ParseLevel(*logLevelStr)
 	if err == nil {
 		log.SetLevel(logLevel)
 	} else {
-		log.Errorf("invalid loglevel %s. Using default 'debug'.", logLevel)
+		log.Errorf("Invalid loglevel '%s'. Using default 'debug'.", logLevel)
 	}
 
 	log.Info("standupbot starting...")
