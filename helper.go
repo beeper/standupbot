@@ -10,6 +10,7 @@ import (
 )
 
 func DoRetry(description string, fn func() (interface{}, error)) (interface{}, error) {
+	var err error
 	b, err := retry.NewFibonacci(1 * time.Second)
 	if err != nil {
 		panic(err)
@@ -17,7 +18,8 @@ func DoRetry(description string, fn func() (interface{}, error)) (interface{}, e
 	b = retry.WithMaxRetries(5, b)
 	for {
 		log.Info("trying: ", description)
-		val, err := fn()
+		var val interface{}
+		val, err = fn()
 		if err == nil {
 			log.Info(description, " succeeded")
 			return val, nil

@@ -128,7 +128,7 @@ func main() {
 	}
 
 	// login to homeserver
-	log.Info("Using username/password auth")
+	log.Info("Logging in")
 	password, err := configuration.GetPassword()
 	if err != nil {
 		log.Fatalf("Could not read password from %s", configuration.PasswordFile)

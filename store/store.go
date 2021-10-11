@@ -41,12 +41,6 @@ func (store *StateStore) CreateTables() error {
 
 	queries := []string{
 		`
-		CREATE TABLE IF NOT EXISTS standupbot_meta (
-			meta_id       INTEGER PRIMARY KEY,
-			access_token  VARCHAR(255)
-		)
-		`,
-		`
 		CREATE TABLE IF NOT EXISTS user_filter_ids (
 			user_id    VARCHAR(255) PRIMARY KEY,
 			filter_id  VARCHAR(255)
@@ -70,6 +64,9 @@ func (store *StateStore) CreateTables() error {
 			user_id  VARCHAR(255),
 			PRIMARY KEY (room_id, user_id)
 		)
+		`,
+		`
+		DROP TABLE IF EXISTS standupbot_meta;
 		`,
 		`
 		DROP TABLE IF EXISTS user_config_room
