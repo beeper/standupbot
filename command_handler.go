@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"maunium.net/go/mautrix"
-	mcrypto "maunium.net/go/mautrix/crypto"
 	mevent "maunium.net/go/mautrix/event"
 	mid "maunium.net/go/mautrix/id"
 
@@ -86,42 +85,6 @@ func BlankStandupFlow() *StandupFlow {
 	}
 }
 
-func SendMessage(roomId mid.RoomID, content mevent.MessageEventContent) (resp *mautrix.RespSendEvent, err error) {
-	r, err := DoRetry("send message to "+roomId.String(), func() (interface{}, error) {
-		if stateStore.IsEncrypted(roomId) {
-			log.Debugf("Sending encrypted event to %s", roomId)
-			encrypted, err := olmMachine.EncryptMegolmEvent(roomId, mevent.EventMessage, content)
-
-			// These three errors mean we have to make a new Megolm session
-			if err == mcrypto.SessionExpired || err == mcrypto.SessionNotShared || err == mcrypto.NoGroupSession {
-				err = olmMachine.ShareGroupSession(roomId, stateStore.GetRoomMembers(roomId))
-				if err != nil {
-					log.Errorf("Failed to share group session to %s: %s", roomId, err)
-					return nil, err
-				}
-				encrypted, err = olmMachine.EncryptMegolmEvent(roomId, mevent.EventMessage, content)
-			}
-
-			if err != nil {
-				log.Errorf("Failed to encrypt message to %s: %s", roomId, err)
-				return nil, err
-			}
-
-			encrypted.RelatesTo = content.RelatesTo // The m.relates_to field should be unencrypted, so copy it.
-			return client.SendMessageEvent(roomId, mevent.EventEncrypted, encrypted)
-		} else {
-			log.Debugf("Sending unencrypted event to %s", roomId)
-			return client.SendMessageEvent(roomId, mevent.EventMessage, content)
-		}
-	})
-	if err != nil || r == nil {
-		// give up
-		log.Errorf("Failed to send message to %s: %s", roomId, err)
-		return nil, err
-	}
-	return r.(*mautrix.RespSendEvent), err
-}
-
 func SendReaction(roomId mid.RoomID, eventID mid.EventID, reaction string) (resp *mautrix.RespSendEvent, err error) {
 	r, err := DoRetry("send reaction", func() (interface{}, error) {
 		return client.SendReaction(roomId, eventID, reaction)
@@ -167,7 +130,7 @@ Version %s. Source code: https://sr.ht/~sumner/standupbot/`
 
 Version %s. <a href="https://sr.ht/~sumner/standupbot/">Source code</a>.`
 
-	SendMessage(roomId, mevent.MessageEventContent{
+	SendMessage(roomId, &mevent.MessageEventContent{
 		MsgType:       mevent.MsgNotice,
 		Body:          fmt.Sprintf(noticeText, VERSION),
 		Format:        mevent.FormatHTML,
@@ -188,14 +151,14 @@ func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
 		}
 
 		noticeText := fmt.Sprintf("Timezone is set to %s", tzStr)
-		SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		SendMessage(roomId, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 		return
 	}
 
 	location, err := time.LoadLocation(params[0])
 	if err != nil {
 		errorMessageText := fmt.Sprintf("%s is not a recognized timezone. Use the name corresponding to a file in the IANA Time Zone database, such as 'America/New_York'", params[0])
-		SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: errorMessageText})
+		SendMessage(roomId, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: errorMessageText})
 	}
 
 	_, err = client.SendStateEvent(roomId, types.StateTzSetting, stateKey, types.TzSettingEventContent{
@@ -207,7 +170,7 @@ func HandleTimezone(roomId mid.RoomID, sender mid.UserID, params []string) {
 	} else {
 		stateStore.SetTimezone(sender, location.String())
 	}
-	SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+	SendMessage(roomId, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 }
 
 // Notify
@@ -225,7 +188,7 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 			noticeText = fmt.Sprintf("Notification time is set to %02d:%02d", int(offset.Hours()), int(offset.Minutes())%60)
 		}
 
-		SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		SendMessage(roomId, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 		return
 	}
 
@@ -253,7 +216,7 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 			}
 		}
 	}
-	SendMessage(roomId, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+	SendMessage(roomId, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 }
 
 // Threads
@@ -269,7 +232,7 @@ func HandleThreads(roomID mid.RoomID, sender mid.UserID, params []string) {
 			noticeText = "Using threads is not enabled."
 		}
 
-		SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		SendMessage(roomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 		return
 	}
 
@@ -281,7 +244,7 @@ func HandleThreads(roomID mid.RoomID, sender mid.UserID, params []string) {
 		useThreads = false
 	} else {
 		noticeText := fmt.Sprintf("Failed setting use threads option: %s is not valid. Use 'true' or 'false'.", useThreadsStr)
-		SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		SendMessage(roomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 		return
 	}
 
@@ -296,7 +259,7 @@ func HandleThreads(roomID mid.RoomID, sender mid.UserID, params []string) {
 		noticeText = fmt.Sprintf("Set use threads option to %s", useThreadsStr)
 		stateStore.SetUseThreads(sender, useThreads)
 	}
-	SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+	SendMessage(roomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 }
 
 // Room
@@ -311,7 +274,7 @@ func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
 			noticeText = fmt.Sprintf("Send room is set to %s", sendRoomID)
 		}
 
-		SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		SendMessage(roomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 		return
 	}
 
@@ -341,7 +304,7 @@ func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
 		}
 	}
 
-	SendMessage(roomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+	SendMessage(roomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 
 	if currentFlow, found := currentStandupFlows[event.Sender]; found && currentFlow.State == Confirm {
 		client.RedactEvent(event.RoomID, currentFlow.PreviewEventId)
@@ -351,7 +314,7 @@ func HandleRoom(roomID mid.RoomID, event *mevent.Event, params []string) {
 
 func EditPreview(roomID mid.RoomID, userID mid.UserID, flow *StandupFlow) []mid.EventID {
 	newPost := FormatPost(userID, flow, true, true, false)
-	resp, _ := SendMessage(roomID, mevent.MessageEventContent{
+	resp, _ := SendMessage(roomID, &mevent.MessageEventContent{
 		MsgType:       mevent.MsgText,
 		Body:          " * " + newPost.Body,
 		Format:        mevent.FormatHTML,
@@ -360,7 +323,7 @@ func EditPreview(roomID mid.RoomID, userID mid.UserID, flow *StandupFlow) []mid.
 			Type:    mevent.RelReplace,
 			EventID: flow.PreviewEventId,
 		},
-		NewContent: &newPost,
+		NewContent: newPost,
 	})
 	return append(flow.ReactableEvents, resp.EventID)
 }
@@ -606,46 +569,46 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		if currentFlow, found := currentStandupFlows[event.Sender]; found && currentFlow.State != FlowNotStarted {
 			SendMessage(event.RoomID, FormatPost(event.Sender, currentFlow, true, false, false))
 		} else {
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "No standup post to show."})
+			SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgText, Body: "No standup post to show."})
 		}
 		break
 	case "edit":
 		if useThreads, _ := stateStore.GetUseThreads(event.Sender); useThreads {
-			SendMessage(event.RoomID, mevent.MessageEventContent{
+			SendMessage(event.RoomID, &mevent.MessageEventContent{
 				MsgType: mevent.MsgNotice,
 				Body:    fmt.Sprintf("You cannot use !edit when using threads. Just reply to the corresponding thread."),
 			})
 			return
 		}
 		if len(commandParts) != 2 {
-			SendMessage(event.RoomID, mevent.MessageEventContent{
+			SendMessage(event.RoomID, &mevent.MessageEventContent{
 				MsgType: mevent.MsgNotice,
 				Body:    fmt.Sprintf("Invalid item to edit! Must be one of Friday, Weekend, Yesterday, Today, Blockers, or Notes"),
 			})
 			return
 		}
 		if currentFlow, found := currentStandupFlows[event.Sender]; !found || currentFlow.State == FlowNotStarted {
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to edit."})
+			SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to edit."})
 		}
 
 		switch strings.ToLower(commandParts[1]) {
 		case "friday":
 			if stateStore.GetCurrentWeekdayInUserTimezone(event.Sender) != time.Monday {
-				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's not Monday, so you can't go back to edit Friday."})
+				SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's not Monday, so you can't go back to edit Friday."})
 				return
 			}
 			GoToStateAndNotify(event.RoomID, event.Sender, Friday)
 			break
 		case "weekend":
 			if stateStore.GetCurrentWeekdayInUserTimezone(event.Sender) != time.Monday {
-				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's not Monday, so you can't go back to edit the weekend."})
+				SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's not Monday, so you can't go back to edit the weekend."})
 				return
 			}
 			GoToStateAndNotify(event.RoomID, event.Sender, Weekend)
 			break
 		case "yesterday":
 			if stateStore.GetCurrentWeekdayInUserTimezone(event.Sender) == time.Monday {
-				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's Monday, so you can't go back to edit yesterday. Edit Friday or Weekend instead."})
+				SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "It's Monday, so you can't go back to edit yesterday. Edit Friday or Weekend instead."})
 				return
 			}
 			GoToStateAndNotify(event.RoomID, event.Sender, Yesterday)
@@ -663,12 +626,12 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		break
 	case "undo":
 		if val, found := currentStandupFlows[event.Sender]; !found || val.State != Sent {
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No sent standup post to undo."})
+			SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No sent standup post to undo."})
 		} else {
 			sendRoomID, err := stateStore.GetSendRoomId(event.Sender)
 			if err != nil {
 				log.Debugf("No send room configured for %s, can't undo anything", event.Sender)
-				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No send room configured. Can't undo anything."})
+				SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No send room configured. Can't undo anything."})
 			}
 
 			stateKey := strings.TrimPrefix(event.Sender.String(), "@")
@@ -676,13 +639,13 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			err = client.StateEvent(event.RoomID, StatePreviousPost, stateKey, &previousPostEventContent)
 			if err != nil {
 				log.Debug("Couldn't find previous post info.")
-				SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No previous standup post to undo."})
+				SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No previous standup post to undo."})
 			}
 			_, err = client.RedactEvent(sendRoomID, previousPostEventContent.EditEventID)
 			if err != nil {
-				SendMessage(event.RoomID, mevent.MessageEventContent{Body: "Failed to redact the standup post!"})
+				SendMessage(event.RoomID, &mevent.MessageEventContent{Body: "Failed to redact the standup post!"})
 			} else {
-				SendMessage(event.RoomID, mevent.MessageEventContent{
+				SendMessage(event.RoomID, &mevent.MessageEventContent{
 					Body: fmt.Sprintf("Redacted standup post with ID: %s in %s", previousPostEventContent.EditEventID, event.RoomID),
 				})
 				currentStandupFlows[event.Sender].State = Confirm
@@ -692,10 +655,10 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 		break
 	case "cancel":
 		if val, found := currentStandupFlows[event.Sender]; !found || val.State == FlowNotStarted {
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to cancel."})
+			SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "No standup post to cancel."})
 		} else {
 			currentStandupFlows[event.Sender] = BlankStandupFlow()
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Standup post cancelled"})
+			SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Standup post cancelled"})
 		}
 		break
 	case "room":

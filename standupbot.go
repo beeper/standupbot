@@ -299,14 +299,14 @@ func main() {
 			for userID, roomID := range usersForCurrentMinute {
 				log.Infof("Notifying %s", userID)
 				if currentFlow, found := currentStandupFlows[userID]; !found || currentFlow.State == FlowNotStarted || currentFlow.State == Sent {
-					SendMessage(roomID, mevent.MessageEventContent{
+					SendMessage(roomID, &mevent.MessageEventContent{
 						MsgType: mevent.MsgText,
 						Body:    "Time to write your standup post!",
 					})
 					currentStandupFlows[userID] = BlankStandupFlow()
 					go CreatePost(roomID, userID)
 				} else {
-					SendMessage(roomID, mevent.MessageEventContent{
+					SendMessage(roomID, &mevent.MessageEventContent{
 						MsgType:       mevent.MsgText,
 						Body:          "Looks like you are already writing a standup post! If you want to start over, type `!standupbot new`",
 						Format:        mevent.FormatHTML,

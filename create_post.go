@@ -25,7 +25,7 @@ type PreviousPostEventContent struct {
 	TodayItems  []StandupItem
 }
 
-func sendMessageWithCheckmarkReaction(roomID mid.RoomID, message mevent.MessageEventContent) (*mautrix.RespSendEvent, error) {
+func sendMessageWithCheckmarkReaction(roomID mid.RoomID, message *mevent.MessageEventContent) (*mautrix.RespSendEvent, error) {
 	resp, err := SendMessage(roomID, message)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func sendMessageWithCheckmarkReaction(roomID mid.RoomID, message mevent.MessageE
 }
 
 func sendThreadRootMessage(roomID mid.RoomID, header string) (*mautrix.RespSendEvent, error) {
-	return SendMessage(roomID, mevent.MessageEventContent{
+	return SendMessage(roomID, &mevent.MessageEventContent{
 		MsgType:       mevent.MsgText,
 		Body:          fmt.Sprintf("**%s** (thread)", header),
 		Format:        mevent.FormatHTML,
@@ -69,14 +69,14 @@ func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowS
 	var resp *mautrix.RespSendEvent
 	var err error
 	if state == Threads || state == ThreadsFriday {
-		resp, err = SendMessage(roomID, mevent.MessageEventContent{
+		resp, err = SendMessage(roomID, &mevent.MessageEventContent{
 			MsgType:       mevent.MsgText,
 			Body:          "**Fill out the standup post by replying in each thread.** *Enter one item per message.*",
 			Format:        mevent.FormatHTML,
 			FormattedBody: "<b>Fill out the standup post by replying in each thread.</b> <i>Enter one item per message.</i>",
 		})
 	} else {
-		resp, err = sendMessageWithCheckmarkReaction(roomID, mevent.MessageEventContent{
+		resp, err = sendMessageWithCheckmarkReaction(roomID, &mevent.MessageEventContent{
 			MsgType:       mevent.MsgText,
 			Body:          fmt.Sprintf("%s *Enter one item per message. React with ✅ when done.*", question),
 			Format:        mevent.FormatHTML,
@@ -186,7 +186,7 @@ func formatList(items []StandupItem) (string, string) {
 	return strings.Join(plain, "\n"), strings.Join(html, "")
 }
 
-func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendConfirmation bool, isEditOfExisting bool) mevent.MessageEventContent {
+func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendConfirmation bool, isEditOfExisting bool) *mevent.MessageEventContent {
 	postText := fmt.Sprintf(`%s's standup post:\n\n`, userID)
 	postHtml := fmt.Sprintf(`<a href="https://matrix.to/#/%s">%s</a>'s standup post:<br><br>`, userID, userID)
 
@@ -235,7 +235,7 @@ func FormatPost(userID mid.UserID, standupFlow *StandupFlow, preview bool, sendC
 		}
 	}
 
-	return mevent.MessageEventContent{
+	return &mevent.MessageEventContent{
 		MsgType:       mevent.MsgText,
 		Body:          postText,
 		Format:        mevent.FormatHTML,
@@ -256,7 +256,7 @@ func ShowMessagePreview(roomID mid.RoomID, userID mid.UserID, currentFlow *Stand
 func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEventID *mid.EventID) {
 	sendRoomID, err := stateStore.GetSendRoomId(event.Sender)
 	if err != nil {
-		SendMessage(event.RoomID, mevent.MessageEventContent{
+		SendMessage(event.RoomID, &mevent.MessageEventContent{
 			MsgType:       mevent.MsgText,
 			Body:          "No send room set! Set one using `!standupbot room [room ID or alias]`",
 			Format:        mevent.FormatHTML,
@@ -272,7 +272,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 		}
 	}
 	if !found {
-		SendMessage(event.RoomID, mevent.MessageEventContent{
+		SendMessage(event.RoomID, &mevent.MessageEventContent{
 			MsgType:       mevent.MsgText,
 			Body:          "You are not a member of the configured send room! Refusing to send a message to the room. Set a new one using `!standupbot room [room ID or alias]`.",
 			Format:        mevent.FormatHTML,
@@ -286,7 +286,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 	var sent *mautrix.RespSendEvent
 	editStr := ""
 	if editEventID != nil {
-		_, err = SendMessage(sendRoomID, mevent.MessageEventContent{
+		_, err = SendMessageOnBehalfOf(&event.Sender, sendRoomID, &mevent.MessageEventContent{
 			MsgType:       mevent.MsgText,
 			Body:          " * " + newPost.Body,
 			Format:        mevent.FormatHTML,
@@ -295,24 +295,24 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 				Type:    mevent.RelReplace,
 				EventID: *editEventID,
 			},
-			NewContent: &newPost,
+			NewContent: newPost,
 		})
 		editStr = " edit"
 		futureEditId = *editEventID
 	} else {
-		sent, err = SendMessage(sendRoomID, newPost)
+		sent, err = SendMessageOnBehalfOf(&event.Sender, sendRoomID, newPost)
 		if err != nil {
 			futureEditId = sent.EventID
 		}
 	}
 
 	if err != nil {
-		SendMessage(event.RoomID, mevent.MessageEventContent{
+		SendMessage(event.RoomID, &mevent.MessageEventContent{
 			MsgType: mevent.MsgText,
 			Body:    "Failed to send standup post" + editStr + " to " + sendRoomID.String(),
 		})
 	} else {
-		SendMessage(event.RoomID, mevent.MessageEventContent{
+		SendMessage(event.RoomID, &mevent.MessageEventContent{
 			MsgType: mevent.MsgText,
 			Body:    "Sent standup post" + editStr + " to " + sendRoomID.String(),
 		})
@@ -396,7 +396,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 			return
 		case Sent:
 			if stateEventErr != nil {
-				SendMessage(event.RoomID, mevent.MessageEventContent{
+				SendMessage(event.RoomID, &mevent.MessageEventContent{
 					MsgType: mevent.MsgText,
 					Body:    "No previous post info found!",
 				})
@@ -409,7 +409,7 @@ func HandleReaction(_ mautrix.EventSource, event *mevent.Event) {
 	} else if reactionEventContent.RelatesTo.Key == RED_X {
 		if currentFlow.State == Confirm || currentFlow.State == Sent {
 			currentStandupFlows[event.Sender] = BlankStandupFlow()
-			SendMessage(event.RoomID, mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Standup post cancelled"})
+			SendMessage(event.RoomID, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: "Standup post cancelled"})
 		}
 	}
 }
