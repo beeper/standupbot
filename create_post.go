@@ -301,7 +301,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 		futureEditId = *editEventID
 	} else {
 		sent, err = SendMessageOnBehalfOf(&event.Sender, sendRoomID, newPost)
-		if err != nil {
+		if err == nil {
 			futureEditId = sent.EventID
 		}
 	}
@@ -316,6 +316,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 			MsgType: mevent.MsgText,
 			Body:    "Sent standup post" + editStr + " to " + sendRoomID.String(),
 		})
+		currentFlow.ResendEventId = nil
 		currentFlow.State = Sent
 		stateKey := strings.TrimPrefix(event.Sender.String(), "@")
 		_, err = client.SendStateEvent(event.RoomID, StatePreviousPost, stateKey, PreviousPostEventContent{

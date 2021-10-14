@@ -81,7 +81,7 @@ func SendMessageOnBehalfOf(user *mid.UserID, roomId mid.RoomID, content *mevent.
 			return client.SendMessageEvent(roomId, mevent.EventMessage, eventContent)
 		}
 	})
-	if err != nil || r == nil {
+	if err != nil {
 		// give up
 		log.Errorf("Failed to send message to %s: %s", roomId, err)
 		return nil, err
