@@ -288,15 +288,11 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 	}
 
 	if err != nil {
-		SendMessage(event.RoomID, &mevent.MessageEventContent{
-			MsgType: mevent.MsgText,
-			Body:    "Failed to send standup post" + editStr + " to " + sendRoomID.String(),
-		})
+		content := format.RenderMarkdown(fmt.Sprintf("Failed to send standup post%s to [%s](https://matrix.to/#/%s)", editStr, sendRoomID.String(), sendRoomID.String()), true, false)
+		SendMessage(event.RoomID, &content)
 	} else {
-		SendMessage(event.RoomID, &mevent.MessageEventContent{
-			MsgType: mevent.MsgText,
-			Body:    "Sent standup post" + editStr + " to " + sendRoomID.String(),
-		})
+		content := format.RenderMarkdown(fmt.Sprintf("Sent standup post%s to [%s](https://matrix.to/#/%s)", editStr, sendRoomID.String(), sendRoomID.String()), true, false)
+		SendMessage(event.RoomID, &content)
 		currentFlow.ResendEventId = nil
 		currentFlow.State = Sent
 		stateKey := strings.TrimPrefix(event.Sender.String(), "@")
