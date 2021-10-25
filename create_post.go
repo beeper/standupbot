@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"maunium.net/go/mautrix"
 	mevent "maunium.net/go/mautrix/event"
+	"maunium.net/go/mautrix/format"
 	mid "maunium.net/go/mautrix/id"
 )
 
@@ -35,12 +36,8 @@ func sendMessageWithCheckmarkReaction(roomID mid.RoomID, message *mevent.Message
 }
 
 func sendThreadRootMessage(roomID mid.RoomID, header string) (*mautrix.RespSendEvent, error) {
-	return SendMessage(roomID, &mevent.MessageEventContent{
-		MsgType:       mevent.MsgText,
-		Body:          fmt.Sprintf("**%s** (thread)", header),
-		Format:        mevent.FormatHTML,
-		FormattedBody: fmt.Sprintf("<b>%s</b> <i>(thread)</i>", header),
-	})
+	content := format.RenderMarkdown(fmt.Sprintf("**%s** *(thread)*", header), true, false)
+	return SendMessage(roomID, &content)
 }
 
 func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowState) {
@@ -69,19 +66,11 @@ func GoToStateAndNotify(roomID mid.RoomID, userID mid.UserID, state StandupFlowS
 	var resp *mautrix.RespSendEvent
 	var err error
 	if state == Threads || state == ThreadsFriday {
-		resp, err = SendMessage(roomID, &mevent.MessageEventContent{
-			MsgType:       mevent.MsgText,
-			Body:          "**Fill out the standup post by replying in each thread.** *Enter one item per message.*",
-			Format:        mevent.FormatHTML,
-			FormattedBody: "<b>Fill out the standup post by replying in each thread.</b> <i>Enter one item per message.</i>",
-		})
+		content := format.RenderMarkdown("**Fill out the standup post by replying in each thread.** *Enter one item per message.*", true, false)
+		resp, err = SendMessage(roomID, &content)
 	} else {
-		resp, err = sendMessageWithCheckmarkReaction(roomID, &mevent.MessageEventContent{
-			MsgType:       mevent.MsgText,
-			Body:          fmt.Sprintf("%s *Enter one item per message. React with ✅ when done.*", question),
-			Format:        mevent.FormatHTML,
-			FormattedBody: fmt.Sprintf("%s <i>Enter one item per message. React with ✅ when done.</i>", question),
-		})
+		content := format.RenderMarkdown(fmt.Sprintf("%s *Enter one item per message. React with ✅ when done.*", question), true, false)
+		resp, err = sendMessageWithCheckmarkReaction(roomID, &content)
 	}
 	if err != nil {
 		log.Errorf("Failed to send notice asking '%s'!", question)
@@ -256,12 +245,8 @@ func ShowMessagePreview(roomID mid.RoomID, userID mid.UserID, currentFlow *Stand
 func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEventID *mid.EventID) {
 	sendRoomID, err := stateStore.GetSendRoomId(event.Sender)
 	if err != nil {
-		SendMessage(event.RoomID, &mevent.MessageEventContent{
-			MsgType:       mevent.MsgText,
-			Body:          "No send room set! Set one using `!standupbot room [room ID or alias]`",
-			Format:        mevent.FormatHTML,
-			FormattedBody: "No send room set! Set one using <code>!standupbot room [room ID or alias]</code>",
-		})
+		content := format.RenderMarkdown("No send room set! Set one using `!standupbot room [room ID or alias]`.", true, false)
+		SendMessage(event.RoomID, &content)
 		return
 	}
 
@@ -272,12 +257,8 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 		}
 	}
 	if !found {
-		SendMessage(event.RoomID, &mevent.MessageEventContent{
-			MsgType:       mevent.MsgText,
-			Body:          "You are not a member of the configured send room! Refusing to send a message to the room. Set a new one using `!standupbot room [room ID or alias]`.",
-			Format:        mevent.FormatHTML,
-			FormattedBody: "<b>You are not a member of the configured send room!</b> Refusing to send a message to the room. Set a new one using <code>!standupbot room [room ID or alias]</code>.",
-		})
+		content := format.RenderMarkdown(fmt.Sprintf("**You are not a member of the configured send room!** Refusing to send a message to the room. Set a new one using `!standupbot room [room ID or alias]`."), true, false)
+		SendMessage(event.RoomID, &content)
 		return
 	}
 

@@ -17,6 +17,7 @@ import (
 	"maunium.net/go/mautrix"
 	mcrypto "maunium.net/go/mautrix/crypto"
 	mevent "maunium.net/go/mautrix/event"
+	"maunium.net/go/mautrix/format"
 	mid "maunium.net/go/mautrix/id"
 
 	"git.sr.ht/~sumner/standupbot/store"
@@ -306,12 +307,8 @@ func main() {
 					currentStandupFlows[userID] = BlankStandupFlow()
 					go CreatePost(roomID, userID)
 				} else {
-					SendMessage(roomID, &mevent.MessageEventContent{
-						MsgType:       mevent.MsgText,
-						Body:          "Looks like you are already writing a standup post! If you want to start over, type `!standupbot new`",
-						Format:        mevent.FormatHTML,
-						FormattedBody: "Looks like you are already writing a standup post! If you want to start over, type <code>!standupbot new</code>",
-					})
+					content := format.RenderMarkdown("Looks like you are already writing a standup post! If you want to start over, type `!standupbot new`", true, false)
+					SendMessage(roomID, &content)
 				}
 			}
 
