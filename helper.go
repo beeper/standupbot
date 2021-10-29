@@ -47,7 +47,7 @@ func SendMessageOnBehalfOf(user *mid.UserID, roomId mid.RoomID, content *mevent.
 	eventContent := &mevent.Content{Parsed: content}
 	if user != nil {
 		eventContent.Raw = map[string]interface{}{
-			"space.nevarro.standupbot.on_behalf_of": *user,
+			"space.nevarro.msc3464.on_behalf_of": *user,
 		}
 	}
 
