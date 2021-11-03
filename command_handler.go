@@ -14,7 +14,7 @@ import (
 	mevent "maunium.net/go/mautrix/event"
 	mid "maunium.net/go/mautrix/id"
 
-	"git.sr.ht/~sumner/standupbot/types"
+	"gitlab.com/beeper/standupbot/types"
 )
 
 type StandupFlowState int
@@ -114,7 +114,7 @@ func SendHelp(roomId mid.RoomID) {
 * room [room alias or ID] -- show or set the room where your standup notification will be sent
 * threads [true|false] -- whether or not to use threads for composing standup posts
 
-Version %s. Source code: https://sr.ht/~sumner/standupbot/`
+Version %s. Source code: https://gitlab.com/beeper/standupbot/`
 	noticeHtml := `<b>COMMANDS:</b>
 <ul>
 <li><b>new</b> &mdash; prepare a new standup post</li>
@@ -130,7 +130,7 @@ Version %s. Source code: https://sr.ht/~sumner/standupbot/`
 <li><b>threads [true|false]</b> &mdash; whether or not to use threads for composing standup posts</li>
 </ul>
 
-Version %s. <a href="https://sr.ht/~sumner/standupbot/">Source code</a>.`
+Version %s. <a href="https://gitlab.com/beeper/standupbot/">Source code</a>.`
 
 	SendMessage(roomId, &mevent.MessageEventContent{
 		MsgType:       mevent.MsgNotice,

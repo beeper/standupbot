@@ -1,4 +1,4 @@
-module git.sr.ht/~sumner/standupbot
+module gitlab.com/beeper/standupbot
 
 go 1.16
 

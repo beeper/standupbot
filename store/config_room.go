@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"git.sr.ht/~sumner/standupbot/types"
 	log "github.com/sirupsen/logrus"
+	"gitlab.com/beeper/standupbot/types"
 	mid "maunium.net/go/mautrix/id"
 )
 
