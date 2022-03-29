@@ -49,8 +49,7 @@ post. To do this, you need to set both a timezone and a notification time.
 
 ## Contribute
 
-Join
-[#standupbot-dev:sumnerevans.com](https://matrix.to/#/#standupbot-dev:sumnerevans.com)
+Join [#standupbot:nevarro.space](https://matrix.to/#/#standupbot:nevarro.space)
 on Matrix for general discussion about the project.
 
 Contributions are welcome! Please submit a merge request or open an issue.
