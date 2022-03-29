@@ -522,7 +522,7 @@ func HandleMessage(_ mautrix.EventSource, event *mevent.Event) {
 			if relatesTo != nil {
 				if relatesTo.Type == mevent.RelReplace {
 					HandleEdit(event, val)
-				} else if relatesTo.Type == mevent.RelReply || relatesTo.Type == "io.element.thread" {
+				} else if relatesTo.Type == mevent.RelReply || relatesTo.Type == "io.element.thread" || relatesTo.Type == "m.thread" {
 					HandleReply(event, val)
 				}
 				return
