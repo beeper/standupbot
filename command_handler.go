@@ -110,7 +110,7 @@ func SendHelp(roomId mid.RoomID) {
 * help -- show this help
 * vanquish -- tell the bot to leave the room
 * tz [timezone] -- show or set the timezone to use for configuring notifications
-* notify [time] -- show or set the time at which the standup notification will be sent
+* notify [time]|stop -- show or set the time at which the standup notification will be sent
 * room [room alias or ID] -- show or set the room where your standup notification will be sent
 * threads [true|false] -- whether or not to use threads for composing standup posts
 
@@ -125,7 +125,7 @@ Version %s. Source code: https://gitlab.com/beeper/standupbot/`
 <li><b>help</b> &mdash; show this help</li>
 <li><b>vanquish</b> &mdash; tell the bot to leave the room</li>
 <li><b>tz [timezone]</b> &mdash; show or set the timezone to use for configuring notifications</li>
-<li><b>notify [time]</b> &mdash; show or set the time at which the standup notification will be sent</li>
+<li><b>notify [time]|stop</b> &mdash; show or set the time at which the standup notification will be sent</li>
 <li><b>room [room alias or ID]</b> &mdash; show or set the room where your standup notification will be sent</li>
 <li><b>threads [true|false]</b> &mdash; whether or not to use threads for composing standup posts</li>
 </ul>
@@ -182,13 +182,25 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 		var notifyEventContent types.NotifyEventContent
 		err := client.StateEvent(roomId, types.StateNotify, stateKey, &notifyEventContent)
 		var noticeText string
-		if err != nil {
+		if err != nil || notifyEventContent.MinutesAfterMidnight == nil {
 			noticeText = "Notification time is not set"
 		} else {
-			offset := time.Minute * time.Duration(notifyEventContent.MinutesAfterMidnight)
+			offset := time.Minute * time.Duration(*notifyEventContent.MinutesAfterMidnight)
 			offset = offset.Round(time.Minute)
 			noticeText = fmt.Sprintf("Notification time is set to %02d:%02d", int(offset.Hours()), int(offset.Minutes())%60)
 		}
+
+		SendMessage(roomId, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
+		return
+	}
+
+	if params[0] == "stop" {
+		_, err := client.SendStateEvent(roomId, types.StateNotify, stateKey, struct{}{})
+		noticeText := "Notifications successfully disabled"
+		if err != nil {
+			noticeText = "Failed to disable notifications"
+		}
+		stateStore.RemoveNotify(sender)
 
 		SendMessage(roomId, &mevent.MessageEventContent{MsgType: mevent.MsgNotice, Body: noticeText})
 		return
@@ -209,7 +221,7 @@ func HandleNotify(roomId mid.RoomID, sender mid.UserID, params []string) {
 			noticeText = fmt.Sprintf("Notification time set to %02d:%02d", hours, minutes)
 			minutesAfterMidnight := minutes + hours*60
 			_, err := client.SendStateEvent(roomId, types.StateNotify, stateKey, types.NotifyEventContent{
-				MinutesAfterMidnight: minutesAfterMidnight,
+				MinutesAfterMidnight: &minutesAfterMidnight,
 			})
 			if err != nil {
 				noticeText = fmt.Sprintf("Failed setting notification time: %s\nCheck to make sure that standupbot is a mod/admin in the room!", err)

@@ -15,7 +15,7 @@ type TzSettingEventContent struct {
 }
 
 type NotifyEventContent struct {
-	MinutesAfterMidnight int
+	MinutesAfterMidnight *int
 }
 
 type SendRoomEventContent struct {

@@ -292,6 +292,7 @@ func SendMessageToSendRoom(event *mevent.Event, currentFlow *StandupFlow, editEv
 		SendMessage(event.RoomID, &content)
 	} else {
 		content := format.RenderMarkdown(fmt.Sprintf("Sent standup post%s to [%s](https://matrix.to/#/%s)", editStr, sendRoomID.String(), sendRoomID.String()), true, false)
+		content.MsgType = mevent.MsgNotice
 		SendMessage(event.RoomID, &content)
 		currentFlow.ResendEventId = nil
 		currentFlow.State = Sent

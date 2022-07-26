@@ -69,13 +69,19 @@ func main() {
 	err = json.Unmarshal(configJson, &configuration)
 	username := mid.UserID(configuration.Username)
 
+	// Create directory /test
+	dataDir := xdg.DataHome() + "/standupbot"
+	if err = os.MkdirAll(dataDir, os.ModePerm); err != nil {
+		log.Fatalf("Could not create data directory %s: %s", dataDir, err)
+	}
+
 	// Open the config database
-	db, err := sql.Open("sqlite3", xdg.DataHome()+"/standupbot/standupbot.db")
+	db, err := sql.Open("sqlite3", dataDir+"/standupbot.db")
 	if err != nil {
 		log.Fatal("Could not open standupbot database.")
 	}
 
-	currentStandupFlowsJson, err := os.ReadFile(xdg.DataHome() + "/standupbot/current-flows.json")
+	currentStandupFlowsJson, err := os.ReadFile(dataDir + "/current-flows.json")
 	if err != nil {
 		log.Warn("Couldn't open the current-flows JSON.")
 	} else {
@@ -106,7 +112,7 @@ func main() {
 			if err != nil {
 				log.Error("Failed to serialize current standup flows!")
 			} else {
-				currentStandupFlowsFile, err := os.OpenFile(xdg.DataHome()+"/standupbot/current-flows.json", os.O_CREATE|os.O_WRONLY, 0600)
+				currentStandupFlowsFile, err := os.OpenFile(dataDir+"/current-flows.json", os.O_CREATE|os.O_WRONLY, 0600)
 				if err != nil {
 					log.Error("Failed to open current standup flows JSON file!")
 				} else {
@@ -125,7 +131,7 @@ func main() {
 
 	stateStore = store.NewStateStore(db)
 	if err := stateStore.CreateTables(); err != nil {
-		log.Fatal("Failed to create the tables for standupbot.", err)
+		log.Fatalf("Failed to create the tables for standupbot: %v", err)
 	}
 
 	// login to homeserver
@@ -193,9 +199,11 @@ func main() {
 
 				var notifyEventContent types.NotifyEventContent
 				if err := client.StateEvent(roomID, types.StateNotify, stateKey, &notifyEventContent); err == nil {
-					log.Infof("Loaded notification minutes after midnight (%d) for %s from state", notifyEventContent.MinutesAfterMidnight, userID)
-					stateStore.SetConfigRoom(userID, roomID)
-					stateStore.SetNotify(userID, notifyEventContent.MinutesAfterMidnight)
+					if notifyEventContent.MinutesAfterMidnight != nil {
+						log.Infof("Loaded notification minutes after midnight (%d) for %s from state", *notifyEventContent.MinutesAfterMidnight, userID)
+						stateStore.SetConfigRoom(userID, roomID)
+						stateStore.SetNotify(userID, *notifyEventContent.MinutesAfterMidnight)
+					}
 				}
 
 				var sendRoomEventContent types.SendRoomEventContent

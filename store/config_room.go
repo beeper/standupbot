@@ -63,6 +63,10 @@ func (store *StateStore) GetTimezone(userID mid.UserID) *time.Location {
 	return time.UTC
 }
 
+func (store *StateStore) RemoveNotify(userID mid.UserID) {
+	delete(store.userNotifyTimeCache, userID)
+}
+
 func (store *StateStore) SetNotify(userID mid.UserID, minutesAfterMidnight int) {
 	store.userNotifyTimeCache[userID] = minutesAfterMidnight
 }
@@ -74,8 +78,10 @@ func (store *StateStore) GetNotify(userID mid.UserID) (int, error) {
 		stateKey := strings.TrimPrefix(userID.String(), "@")
 		var notifyEventContent types.NotifyEventContent
 		if err := store.Client.StateEvent(roomID, types.StateNotify, stateKey, &notifyEventContent); err == nil {
-			minutesAfterMidnight = notifyEventContent.MinutesAfterMidnight
-			store.userNotifyTimeCache[userID] = minutesAfterMidnight
+			if notifyEventContent.MinutesAfterMidnight != nil {
+				minutesAfterMidnight = *notifyEventContent.MinutesAfterMidnight
+				store.userNotifyTimeCache[userID] = minutesAfterMidnight
+			}
 		} else {
 			// No notify time
 			return 0, err
