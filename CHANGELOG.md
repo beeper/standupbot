@@ -1,3 +1,18 @@
+# v0.4.1
+
+* Added the ability to disable notifications using `!su notify stop`
+* Remove reply fallback text from messages before adding to the post
+* Improvements to thread UX
+* Added a `space.nevarro.msc3464.on_behalf_of` key to the content indicating who
+  the standup post is for.
+* Fixed bug where the standupbot would leave because it thought it was the last
+  in the room.
+* Internal Changes
+  * Migrated from sourcehut to GitLab
+  * Added pre-commit config
+  * Use `format.RenderMarkdown` from mautrix instead of manually rendering
+    markdown and HTML versions of all of the messages.
+
 # v0.4.0
 
 * **Thread Mode:** Added ability to use standupbot in threaded mode. To enable,
