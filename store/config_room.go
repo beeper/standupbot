@@ -139,7 +139,7 @@ func (store *StateStore) GetNotifyUsersForMinutesAfterUtcForToday() map[int]map[
 		}
 
 		minutesAfterMidnight, err := store.GetNotify(userID)
-		if err != nil {
+		if err != nil || minutesAfterMidnight == 0 {
 			continue
 		}
 		notifyTime := midnight.Add(time.Duration(minutesAfterMidnight) * time.Minute)
