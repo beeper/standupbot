@@ -5,8 +5,9 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"gitlab.com/beeper/standupbot/types"
 	mid "maunium.net/go/mautrix/id"
+
+	"github.com/beeper/standupbot/types"
 )
 
 // Setting which room to look for as the config room for a given user.

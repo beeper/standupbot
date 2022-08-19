@@ -20,8 +20,8 @@ import (
 	"maunium.net/go/mautrix/format"
 	mid "maunium.net/go/mautrix/id"
 
-	"gitlab.com/beeper/standupbot/store"
-	"gitlab.com/beeper/standupbot/types"
+	"github.com/beeper/standupbot/store"
+	"github.com/beeper/standupbot/types"
 )
 
 var client *mautrix.Client

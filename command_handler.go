@@ -14,7 +14,7 @@ import (
 	mevent "maunium.net/go/mautrix/event"
 	mid "maunium.net/go/mautrix/id"
 
-	"gitlab.com/beeper/standupbot/types"
+	"github.com/beeper/standupbot/types"
 )
 
 type StandupFlowState int

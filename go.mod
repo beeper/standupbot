@@ -1,4 +1,4 @@
-module gitlab.com/beeper/standupbot
+module github.com/beeper/standupbot
 
 go 1.16
 
