@@ -6,6 +6,7 @@ in
     buildInputs = [
       go
       olm
+      pre-commit
     ] ++ lib.lists.optional (!forCI) [
       gotools
       gopls
