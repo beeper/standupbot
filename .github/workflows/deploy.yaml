@@ -20,7 +20,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
 
       - name: Install goimports
         run: |
@@ -39,7 +38,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
 
       - name: Install dependencies
         run: sudo apt-get install libolm-dev libolm3
